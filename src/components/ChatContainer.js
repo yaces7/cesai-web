@@ -237,7 +237,7 @@ const ChatContainer = () => {
           'Access-Control-Allow-Origin': '*'
         },
         mode: 'cors',
-        credentials: 'same-origin',
+        credentials: 'include',
         body: JSON.stringify({ message: input })
       });
 
