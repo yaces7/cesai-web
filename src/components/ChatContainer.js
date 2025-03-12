@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
 import ChatMessage from './ChatMessage';
-import { FaPaperPlane, FaImage, FaGift, FaGlobe, FaMicrophone } from 'react-icons/fa';
+import { FaPaperPlane, FaImage, FaGift, FaGlobe, FaMicrophone, FaBars } from 'react-icons/fa';
 
 const Container = styled.div`
   width: 100%;
@@ -18,7 +18,7 @@ const Header = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #000000;
+  background: rgba(30, 13, 61, 0.9);
   position: fixed;
   top: 0;
   left: 0;
@@ -34,6 +34,20 @@ const HeaderLeft = styled.div`
 const HeaderRight = styled.div`
   display: flex;
   gap: 0.5rem;
+`;
+
+const MobileMenuButton = styled.button`
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.2rem;
+  cursor: pointer;
+  margin-right: 1rem;
+  display: none;
+  
+  @media (max-width: 768px) {
+    display: block;
+  }
 `;
 
 const AnimatedTitle = styled(motion.h1)`
@@ -81,7 +95,7 @@ const InputSection = styled.div`
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(to top, #000000 0%, transparent 100%);
+  background: linear-gradient(to top, rgba(10, 26, 61, 0.95) 0%, transparent 100%);
   z-index: 1000;
 `;
 
@@ -180,12 +194,43 @@ const Dot = styled(motion.span)`
   display: inline-block;
 `;
 
-const ChatContainer = () => {
+const ToolsContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+`;
+
+const LimitWarning = styled.div`
+  text-align: center;
+  color: #FF5252;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(255, 82, 82, 0.1);
+  border-radius: 0.5rem;
+`;
+
+const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [remainingRequests, setRemainingRequests] = useState(100);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Load conversation history when conversationId changes
+  useEffect(() => {
+    if (conversationId) {
+      // This would be replaced with actual API call
+      // fetchConversationHistory(conversationId);
+      
+      // For now, use mock data
+      setMessages([
+        { text: "Merhaba! Size nasıl yardımcı olabilirim?", isUser: false }
+      ]);
+    }
+  }, [conversationId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -221,6 +266,16 @@ const ChatContainer = () => {
     e.preventDefault();
     if (!input.trim()) return;
 
+    // Check if user has reached the request limit
+    if (remainingRequests <= 0) {
+      setMessages(prev => [...prev, { 
+        text: "Günlük istek limitinize ulaştınız. Yarın tekrar deneyin.", 
+        isUser: false,
+        isError: true
+      }]);
+      return;
+    }
+
     setMessages(prev => [...prev, { text: input, isUser: true }]);
     setInput('');
     if (textareaRef.current) {
@@ -247,25 +302,31 @@ const ChatContainer = () => {
       
       await streamResponse(data.response);
       
+      // Update remaining requests
+      const newRemainingRequests = remainingRequests - 1;
+      setRemainingRequests(newRemainingRequests);
+      updateRemainingRequests(newRemainingRequests);
+      
     } catch (error) {
       console.error('Error:', error);
       setIsTyping(false);
       setMessages(prev => [...prev, { 
-        text: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.', 
-        isUser: false 
+        text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.", 
+        isUser: false,
+        isError: true
       }]);
     }
   };
 
-  const dotVariants = {
-    animate: {
-      y: [0, -8, 0],
-      transition: {
-        duration: 0.8,
-        repeat: Infinity,
-        repeatType: "reverse",
-        ease: "easeInOut"
-      }
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+    adjustTextareaHeight();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
     }
   };
 
@@ -273,74 +334,84 @@ const ChatContainer = () => {
     <Container>
       <Header>
         <HeaderLeft>
-          <AnimatedTitle
-            animate={{ 
-              color: ['#E8DFD8', '#4F9BFF', '#E8DFD8'],
-              transition: { duration: 3, repeat: Infinity }
-            }}
-          >
-            CesAI
-          </AnimatedTitle>
+          <MobileMenuButton onClick={toggleSidebar}>
+            <FaBars />
+          </MobileMenuButton>
+          <AnimatedTitle>CesAI</AnimatedTitle>
         </HeaderLeft>
         <HeaderRight>
-          <ToolButton data-tooltip="Görsel oluştur">
-            <FaImage size={20} />
-          </ToolButton>
-          <ToolButton data-tooltip="Beni şaşırtmak için">
-            <FaGift size={20} />
-          </ToolButton>
-          <ToolButton data-tooltip="Metni özetle">
-            <FaGlobe size={20} />
-          </ToolButton>
-          <ToolButton data-tooltip="Kod">
-            <FaMicrophone size={20} />
+          <ToolButton data-tooltip="Dil Seçimi">
+            <FaGlobe />
           </ToolButton>
         </HeaderRight>
       </Header>
-      
+
       <MessagesContainer>
-        {messages.map((msg, idx) => (
-          <ChatMessage
-            key={idx}
-            message={msg.text}
-            isUser={msg.isUser}
+        {messages.map((message, index) => (
+          <ChatMessage 
+            key={index} 
+            text={message.text} 
+            isUser={message.isUser} 
+            isError={message.isError}
           />
         ))}
+        
         {isTyping && (
           <TypingIndicator>
-            <Dot variants={dotVariants} animate="animate" />
-            <Dot variants={dotVariants} animate="animate" transition={{ delay: 0.2 }} />
-            <Dot variants={dotVariants} animate="animate" transition={{ delay: 0.4 }} />
+            <Dot
+              animate={{ y: [0, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 1, delay: 0 }}
+            />
+            <Dot
+              animate={{ y: [0, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 1, delay: 0.2 }}
+            />
+            <Dot
+              animate={{ y: [0, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
+            />
           </TypingIndicator>
         )}
+        
         <div ref={messagesEndRef} />
       </MessagesContainer>
-      
+
       <InputSection>
         <InputContainer onSubmit={handleSubmit}>
           <Input
             ref={textareaRef}
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              adjustTextareaHeight();
-            }}
-            placeholder="Mesajınızı yazın..."
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
-              }
-            }}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Bir mesaj yazın..."
+            rows={1}
           />
           <SendButton
             type="submit"
-            whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
+            disabled={!input.trim()}
           >
-            <FaPaperPlane size={20} />
+            <FaPaperPlane />
           </SendButton>
         </InputContainer>
+        
+        <ToolsContainer>
+          <ToolButton data-tooltip="Resim Yükle">
+            <FaImage />
+          </ToolButton>
+          <ToolButton data-tooltip="Ses ile Konuş">
+            <FaMicrophone />
+          </ToolButton>
+          <ToolButton data-tooltip="Özellikler">
+            <FaGift />
+          </ToolButton>
+        </ToolsContainer>
+        
+        {remainingRequests <= 10 && (
+          <LimitWarning>
+            Dikkat: Bugün sadece {remainingRequests} istek hakkınız kaldı.
+          </LimitWarning>
+        )}
       </InputSection>
     </Container>
   );

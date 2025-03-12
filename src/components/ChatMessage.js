@@ -1,98 +1,145 @@
 import React from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
-import { FaRobot, FaUser, FaCopy } from 'react-icons/fa';
+import { FaUser, FaRobot, FaExclamationTriangle } from 'react-icons/fa';
 
 const MessageContainer = styled(motion.div)`
   display: flex;
-  padding: 1.5rem;
-  gap: 1.5rem;
-  background: ${props => props.isUser ? 'transparent' : 'rgba(64,65,79, 0.9)'};
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 1.5rem;
+  align-items: flex-start;
 `;
 
-const IconContainer = styled.div`
-  width: 30px;
-  height: 30px;
-  border-radius: 0.25rem;
+const Avatar = styled.div`
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${props => props.isUser ? '#4F9BFF' : '#10A37F'};
+  margin-right: 1rem;
   flex-shrink: 0;
+  
+  background: ${props => props.isUser 
+    ? 'linear-gradient(135deg, #4F9BFF, #9D4EDD)' 
+    : props.isError 
+      ? 'linear-gradient(135deg, #FF5252, #FF9800)'
+      : 'linear-gradient(135deg, #2ED573, #4F9BFF)'
+  };
+  
+  color: white;
+  font-size: 1.2rem;
 `;
 
 const MessageContent = styled.div`
-  flex: 1;
+  background: ${props => props.isUser 
+    ? 'rgba(79, 155, 255, 0.1)' 
+    : props.isError 
+      ? 'rgba(255, 82, 82, 0.1)'
+      : 'rgba(46, 213, 115, 0.1)'
+  };
+  
+  border: 1px solid ${props => props.isUser 
+    ? 'rgba(79, 155, 255, 0.2)' 
+    : props.isError 
+      ? 'rgba(255, 82, 82, 0.2)'
+      : 'rgba(46, 213, 115, 0.2)'
+  };
+  
+  border-radius: 0.8rem;
+  padding: 1rem;
   color: #E8DFD8;
-  font-size: 1rem;
-  line-height: 1.5;
+  max-width: 80%;
+  
+  @media (max-width: 768px) {
+    max-width: 90%;
+  }
+`;
+
+const MessageText = styled.div`
   white-space: pre-wrap;
-  position: relative;
-  max-width: 800px;
-`;
-
-const CopyButton = styled(motion.button)`
-  position: absolute;
-  top: 0;
-  right: 0;
-  background: transparent;
-  border: none;
-  color: rgba(255,255,255,0.5);
-  cursor: pointer;
-  padding: 0.5rem;
-  display: none;
+  line-height: 1.5;
+  font-size: 1rem;
   
-  ${MessageContainer}:hover & {
-    display: block;
-  }
-  
-  &:hover {
-    color: #E8DFD8;
-  }
-`;
-
-const messageVariants = {
-  hidden: { 
-    opacity: 0,
-    y: 10
-  },
-  visible: { 
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.3
+  a {
+    color: #4F9BFF;
+    text-decoration: none;
+    
+    &:hover {
+      text-decoration: underline;
     }
   }
-};
+  
+  code {
+    font-family: 'Fira Code', monospace;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.2rem;
+    font-size: 0.9rem;
+  }
+  
+  pre {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    
+    code {
+      background: transparent;
+      padding: 0;
+    }
+  }
+`;
 
-const ChatMessage = ({ message, isUser }) => {
-  const handleCopy = () => {
-    navigator.clipboard.writeText(message);
+const ChatMessage = ({ text, isUser, isError }) => {
+  // Function to convert URLs to clickable links
+  const formatText = (text) => {
+    // URL regex pattern
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    
+    // Split by newlines to preserve them
+    const parts = text.split('\n');
+    
+    // Process each part
+    const formattedParts = parts.map((part, i) => {
+      // Replace URLs with links
+      const withLinks = part.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+      });
+      
+      // Return the processed part
+      return withLinks;
+    });
+    
+    // Join back with newlines
+    return formattedParts.join('\n');
   };
-
+  
+  // Format the message text
+  const formattedText = formatText(text);
+  
   return (
     <MessageContainer
-      isUser={isUser}
-      initial="hidden"
-      animate="visible"
-      variants={messageVariants}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}
     >
-      <IconContainer isUser={isUser}>
-        {isUser ? <FaUser size={16} /> : <FaRobot size={16} />}
-      </IconContainer>
-      <MessageContent>
-        {message}
-        {!isUser && (
-          <CopyButton
-            onClick={handleCopy}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            <FaCopy size={16} />
-          </CopyButton>
-        )}
+      {!isUser && (
+        <Avatar isUser={isUser} isError={isError}>
+          {isError ? <FaExclamationTriangle /> : <FaRobot />}
+        </Avatar>
+      )}
+      
+      <MessageContent isUser={isUser} isError={isError}>
+        <MessageText dangerouslySetInnerHTML={{ __html: formattedText }} />
       </MessageContent>
+      
+      {isUser && (
+        <Avatar isUser={isUser}>
+          <FaUser />
+        </Avatar>
+      )}
     </MessageContainer>
   );
 };
