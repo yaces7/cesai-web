@@ -285,15 +285,32 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     setIsTyping(true);
 
     try {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        throw new Error('Kimlik doğrulama gerekli');
+      }
+      
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         mode: 'cors',
         credentials: 'include',
-        body: JSON.stringify({ message: input })
+        body: JSON.stringify({ 
+          message: input,
+          conversation_id: conversationId
+        })
       });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Oturum süresi doldu. Lütfen tekrar giriş yapın.');
+        }
+        throw new Error('API yanıt hatası: ' + response.status);
+      }
 
       const data = await response.json();
       
@@ -310,8 +327,23 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     } catch (error) {
       console.error('Error:', error);
       setIsTyping(false);
+      
+      let errorMessage = "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.";
+      
+      if (error.message.includes('Kimlik doğrulama gerekli') || error.message.includes('Oturum süresi doldu')) {
+        errorMessage = "Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.";
+        // Kullanıcıyı login sayfasına yönlendir
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      } else if (error.message.includes('CORS')) {
+        errorMessage = "Sunucu bağlantısında bir sorun oluştu. CORS hatası.";
+      } else if (error.message.includes('API yanıt hatası')) {
+        errorMessage = `Sunucu yanıt hatası: ${error.message}`;
+      }
+      
       setMessages(prev => [...prev, { 
-        text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.", 
+        text: errorMessage, 
         isUser: false,
         isError: true
       }]);
