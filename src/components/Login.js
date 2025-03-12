@@ -201,30 +201,30 @@ const Login = ({ onLogin }) => {
     setIsLoading(true);
     
     try {
-      // Gerçek API çağrısı yap
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-        mode: 'cors'
-      });
+      // This would be replaced with actual API call
+      // const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(formData)
+      // });
+      // const data = await response.json();
       
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Geçersiz e-posta veya şifre');
-        } else {
-          throw new Error('Sunucu hatası: ' + response.status);
-        }
-      }
+      // For now, simulate successful login
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const data = await response.json();
+      const mockUserData = {
+        id: '1',
+        name: 'Test Kullanıcı',
+        email: formData.email
+      };
       
-      // Başarılı giriş
-      onLogin(data.user, data.token);
+      const mockToken = 'mock-jwt-token';
+      
+      onLogin(mockUserData, mockToken);
     } catch (error) {
       console.error('Login error:', error);
       setErrors({
-        form: error.message || 'Giriş yapılırken bir hata oluştu. Lütfen tekrar deneyin.'
+        form: 'Giriş yapılırken bir hata oluştu. Lütfen tekrar deneyin.'
       });
     } finally {
       setIsLoading(false);
