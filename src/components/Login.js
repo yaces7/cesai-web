@@ -206,8 +206,7 @@ const Login = ({ onLogin }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
-        mode: 'cors',
-        credentials: 'include'
+        mode: 'cors'
       });
       
       if (!response.ok) {

@@ -308,7 +308,6 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           'Authorization': `Bearer ${token}`
         },
         mode: 'cors',
-        credentials: 'include',
         body: JSON.stringify({ 
           message: input,
           conversation_id: conversationId

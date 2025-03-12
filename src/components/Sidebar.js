@@ -19,8 +19,9 @@ const SidebarContainer = styled(motion.div)`
     left: 0;
     top: 0;
     bottom: 0;
+    width: 80%;
+    max-width: 280px;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    transform: translateX(0); /* Varsayılan olarak görünür */
   }
 `;
 

@@ -26,7 +26,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [remainingRequests, setRemainingRequests] = useState(100);
 
   // Check if user is already logged in
@@ -50,8 +50,7 @@ function App() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        mode: 'cors',
-        credentials: 'include'
+        mode: 'cors'
       });
       
       if (!response.ok) {
@@ -108,8 +107,7 @@ function App() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        mode: 'cors',
-        credentials: 'include'
+        mode: 'cors'
       });
       
       if (!response.ok) {
