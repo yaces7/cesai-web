@@ -43,10 +43,20 @@ const MobileMenuButton = styled.button`
   font-size: 1.2rem;
   cursor: pointer;
   margin-right: 1rem;
-  display: none;
+  padding: 8px;
+  border-radius: 4px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
   
   @media (max-width: 768px) {
     display: block;
+  }
+  
+  @media (min-width: 769px) {
+    display: none;
   }
 `;
 

@@ -26,7 +26,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [currentConversation, setCurrentConversation] = useState(null);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true);
   const [remainingRequests, setRemainingRequests] = useState(100);
 
   // Check if user is already logged in
@@ -44,20 +44,37 @@ function App() {
 
   const fetchConversations = async (token) => {
     try {
-      // This would be replaced with actual API call
-      // const response = await fetch(`${process.env.REACT_APP_API_URL}/conversations`, {
-      //   headers: { Authorization: `Bearer ${token}` }
-      // });
-      // const data = await response.json();
-      // setConversations(data.conversations);
+      // Gerçek API çağrısı yap
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/conversations`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors',
+        credentials: 'include'
+      });
       
-      // For now, use mock data
+      if (!response.ok) {
+        throw new Error('Konuşmalar alınamadı');
+      }
+      
+      const data = await response.json();
+      setConversations(data.conversations || []);
+      
+      // Eğer konuşma varsa, ilk konuşmayı seç
+      if (data.conversations && data.conversations.length > 0) {
+        setCurrentConversation(data.conversations[0]._id);
+      } else {
+        // Konuşma yoksa, yeni bir konuşma oluştur
+        createNewConversation();
+      }
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      // Hata durumunda varsayılan bir konuşma oluştur
       setConversations([
         { id: '1', title: 'Yeni Sohbet', createdAt: new Date().toISOString() }
       ]);
       setCurrentConversation('1');
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
     }
   };
 
@@ -78,15 +95,49 @@ function App() {
     setCurrentConversation(null);
   };
 
-  const createNewConversation = () => {
-    const newConversation = {
-      id: Date.now().toString(),
-      title: 'Yeni Sohbet',
-      createdAt: new Date().toISOString()
-    };
-    
-    setConversations([newConversation, ...conversations]);
-    setCurrentConversation(newConversation.id);
+  const createNewConversation = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Token bulunamadı');
+      }
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/conversations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Yeni konuşma oluşturulamadı');
+      }
+      
+      const data = await response.json();
+      
+      const newConversation = {
+        id: data.id,
+        title: data.title,
+        createdAt: data.created_at
+      };
+      
+      setConversations([newConversation, ...conversations]);
+      setCurrentConversation(newConversation.id);
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+      // Hata durumunda yerel olarak bir konuşma oluştur
+      const newConversation = {
+        id: Date.now().toString(),
+        title: 'Yeni Sohbet',
+        createdAt: new Date().toISOString()
+      };
+      
+      setConversations([newConversation, ...conversations]);
+      setCurrentConversation(newConversation.id);
+    }
   };
 
   const updateRemainingRequests = (count) => {

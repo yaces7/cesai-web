@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
 import { FaPlus, FaSignOutAlt, FaUser, FaRobot, FaHistory, FaInfoCircle } from 'react-icons/fa';
@@ -20,6 +20,7 @@ const SidebarContainer = styled(motion.div)`
     top: 0;
     bottom: 0;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    transform: translateX(0); /* Varsayılan olarak görünür */
   }
 `;
 
@@ -219,6 +220,26 @@ const Sidebar = ({
   setIsMobileOpen,
   remainingRequests
 }) => {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // Ekran boyutunu kontrol et
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    // İlk yükleme
+    checkIsMobile();
+    
+    // Ekran boyutu değiştiğinde
+    window.addEventListener('resize', checkIsMobile);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', checkIsMobile);
+    };
+  }, []);
+  
   // Format date for display
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -231,10 +252,13 @@ const Sidebar = ({
     closed: { x: "-100%", opacity: 0 }
   };
   
+  // Mobil görünümde sidebar'ın durumunu belirle
+  const animationState = isMobile ? (isMobileOpen ? "open" : "closed") : "open";
+  
   return (
     <SidebarContainer 
       initial={false}
-      animate={isMobileOpen ? "open" : "closed"}
+      animate={animationState}
       variants={variants}
       transition={{ duration: 0.3 }}
     >

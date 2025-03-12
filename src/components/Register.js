@@ -225,16 +225,25 @@ const Register = () => {
     setIsLoading(true);
     
     try {
-      // This would be replaced with actual API call
-      // const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/register`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(formData)
-      // });
-      // const data = await response.json();
+      // Gerçek API çağrısı yap
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+        mode: 'cors',
+        credentials: 'include'
+      });
       
-      // For now, simulate successful registration
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!response.ok) {
+        if (response.status === 400) {
+          const data = await response.json();
+          throw new Error(data.message || 'Kayıt işlemi başarısız oldu.');
+        } else {
+          throw new Error('Sunucu hatası: ' + response.status);
+        }
+      }
+      
+      const data = await response.json();
       
       setSuccess(true);
       
@@ -245,7 +254,7 @@ const Register = () => {
     } catch (error) {
       console.error('Registration error:', error);
       setErrors({
-        form: 'Kayıt olurken bir hata oluştu. Lütfen tekrar deneyin.'
+        form: error.message || 'Kayıt olurken bir hata oluştu. Lütfen tekrar deneyin.'
       });
     } finally {
       setIsLoading(false);
