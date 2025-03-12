@@ -233,8 +233,7 @@ const ChatContainer = () => {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
+          'Content-Type': 'application/json'
         },
         mode: 'cors',
         credentials: 'include',
