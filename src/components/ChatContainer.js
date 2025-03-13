@@ -217,8 +217,10 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [remainingRequests, setRemainingRequests] = useState(100);
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Load conversation history when conversationId changes
   useEffect(() => {
@@ -290,11 +292,13 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        mode: 'cors',
-        credentials: 'include',
-        body: JSON.stringify({ message: input })
+        body: JSON.stringify({ 
+          message: input,
+          conversation_id: conversationId
+        })
       });
 
       const data = await response.json();
@@ -302,10 +306,21 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsTyping(false);
       
-      await streamResponse(data.response);
+      // Check if it's a math response
+      if (data.is_math) {
+        // For math responses, don't stream, show the full response at once
+        setMessages(prev => [...prev, { 
+          text: data.response, 
+          isUser: false,
+          isMath: true
+        }]);
+      } else {
+        // For regular responses, stream them
+        await streamResponse(data.response);
+      }
       
       // Update remaining requests
-      const newRemainingRequests = remainingRequests - 1;
+      const newRemainingRequests = data.remaining_requests;
       setRemainingRequests(newRemainingRequests);
       updateRemainingRequests(newRemainingRequests);
       
@@ -330,6 +345,93 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       e.preventDefault();
       handleSubmit(e);
     }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Dosya türünü kontrol et
+    if (!file.type.startsWith('image/')) {
+      alert('Lütfen bir görüntü dosyası seçin (JPEG, PNG, vb.)');
+      return;
+    }
+    
+    // Dosya boyutunu kontrol et (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Dosya boyutu çok büyük. Lütfen 5MB\'dan küçük bir dosya seçin.');
+      return;
+    }
+    
+    // Dosyayı base64'e dönüştür
+    const reader = new FileReader();
+    reader.onloadstart = () => setIsUploading(true);
+    
+    reader.onload = async (event) => {
+      const base64Image = event.target.result;
+      
+      // Kullanıcı mesajını ekle
+      setMessages(prev => [...prev, { 
+        text: '[Görüntü yüklendi]', 
+        isUser: true,
+        isImage: true,
+        imageData: base64Image
+      }]);
+      
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ 
+            image: base64Image,
+            conversation_id: conversationId
+          })
+        });
+        
+        const data = await response.json();
+        
+        // Yükleme durumunu kaldır
+        setIsUploading(false);
+        
+        // Bot yanıtını ekle
+        setMessages(prev => [...prev, { 
+          text: data.response, 
+          isUser: false,
+          isImageAnalysis: true
+        }]);
+        
+        // Kalan istek sayısını güncelle
+        const newRemainingRequests = data.remaining_requests;
+        setRemainingRequests(newRemainingRequests);
+        updateRemainingRequests(newRemainingRequests);
+        
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        setIsUploading(false);
+        setMessages(prev => [...prev, { 
+          text: "Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin.", 
+          isUser: false,
+          isError: true
+        }]);
+      }
+    };
+    
+    reader.onerror = () => {
+      setIsUploading(false);
+      alert('Dosya okuma hatası. Lütfen tekrar deneyin.');
+    };
+    
+    reader.readAsDataURL(file);
+    
+    // Dosya seçiciyi sıfırla (aynı dosyayı tekrar seçebilmek için)
+    e.target.value = null;
+  };
+
+  const triggerImageUpload = () => {
+    fileInputRef.current.click();
   };
 
   return (
@@ -361,6 +463,9 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
             text={message.text}
             isUser={message.isUser}
             isError={message.isError}
+            isImage={message.isImage}
+            imageData={message.imageData}
+            isImageAnalysis={message.isImageAnalysis}
           />
         ))}
         
@@ -378,6 +483,12 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
               animate={{ y: [0, -10, 0] }}
               transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
             />
+          </TypingIndicator>
+        )}
+        
+        {isUploading && (
+          <TypingIndicator>
+            Görüntü yükleniyor ve analiz ediliyor...
           </TypingIndicator>
         )}
       </MessagesContainer>
@@ -402,9 +513,19 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         </InputContainer>
         
         <ToolsContainer>
-          <ToolButton data-tooltip="Resim Yükle">
+          <ToolButton 
+            data-tooltip="Resim Yükle"
+            onClick={triggerImageUpload}
+          >
             <FaImage />
           </ToolButton>
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            accept="image/*"
+            onChange={handleImageUpload}
+          />
           <ToolButton data-tooltip="Ses ile Konuş">
             <FaMicrophone />
           </ToolButton>

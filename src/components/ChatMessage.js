@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
 import { FaUser, FaRobot, FaExclamationTriangle, FaCopy, FaCheck } from 'react-icons/fa';
@@ -120,8 +120,96 @@ const CopyButton = styled.button`
   }
 `;
 
-const ChatMessage = ({ text, isUser, isError }) => {
+const MathContent = styled.div`
+  font-family: 'Fira Code', monospace;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  white-space: pre;
+`;
+
+const ImageContainer = styled.div`
+  margin-top: 8px;
+  max-width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+`;
+
+const UploadedImage = styled.img`
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 8px;
+`;
+
+const AnalysisContent = styled.div`
+  margin-top: 8px;
+  background-color: #f0f7ff;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid #3498db;
+`;
+
+const AnalysisTitle = styled.div`
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #3498db;
+`;
+
+const AnalysisText = styled.div`
+  white-space: pre-wrap;
+  line-height: 1.5;
+`;
+
+const MathProblem = styled.div`
+  margin-top: 8px;
+  background-color: #f5f5f5;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid #9b59b6;
+`;
+
+const MathProblemTitle = styled.div`
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #9b59b6;
+`;
+
+const MathProblemText = styled.div`
+  white-space: pre-wrap;
+  line-height: 1.5;
+`;
+
+const MathSolution = styled.div`
+  margin-top: 12px;
+  background-color: #f0fff0;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid #2ecc71;
+`;
+
+const MathSolutionTitle = styled.div`
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #2ecc71;
+`;
+
+const MathSolutionText = styled.div`
+  white-space: pre-wrap;
+  line-height: 1.5;
+`;
+
+const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysis }) => {
   const [copied, setCopied] = useState(false);
+  const [formattedText, setFormattedText] = useState('');
+  const messageRef = useRef(null);
+  
+  useEffect(() => {
+    // Format the message text
+    setFormattedText(formatText(text));
+  }, [text]);
   
   // Function to convert URLs to clickable links
   const formatText = (text) => {
@@ -146,8 +234,15 @@ const ChatMessage = ({ text, isUser, isError }) => {
     return formattedParts.join('\n');
   };
   
-  // Format the message text
-  const formattedText = formatText(text);
+  // Check if the message contains math content
+  const containsMathContent = (text) => {
+    const mathKeywords = [
+      'İşlem:', 'Sonuç:', 'Denklem:', 'Çözüm:', 'türevi:', 'integrali:',
+      'limit:', 'faktöriyel', '√', 'Sadeleştirilmiş', 'Genişletilmiş', 'Çarpanlarına'
+    ];
+    
+    return mathKeywords.some(keyword => text.includes(keyword));
+  };
   
   // Copy message text to clipboard
   const copyToClipboard = () => {
@@ -157,34 +252,81 @@ const ChatMessage = ({ text, isUser, isError }) => {
     });
   };
   
+  // Render math content with special formatting
+  const renderMathContent = () => {
+    return (
+      <MathContent>
+        {text.split('\n').map((line, index) => (
+          <div key={index}>{line}</div>
+        ))}
+      </MathContent>
+    );
+  };
+
+  const renderContent = () => {
+    if (isImage && imageData) {
+      return (
+        <ImageContainer>
+          <UploadedImage src={imageData} alt="Yüklenen görüntü" />
+        </ImageContainer>
+      );
+    }
+
+    if (isImageAnalysis) {
+      return (
+        <AnalysisContent>
+          <AnalysisTitle>Görüntü Analizi</AnalysisTitle>
+          <AnalysisText>{text}</AnalysisText>
+        </AnalysisContent>
+      );
+    }
+
+    // Matematik problemleri için özel işleme
+    if (text.includes('MATH_PROBLEM:') && text.includes('SOLUTION:')) {
+      const parts = text.split('SOLUTION:');
+      const problem = parts[0].replace('MATH_PROBLEM:', '').trim();
+      const solution = parts[1].trim();
+      
+      return (
+        <>
+          <MathProblem>
+            <MathProblemTitle>Matematik Problemi:</MathProblemTitle>
+            <MathProblemText>{problem}</MathProblemText>
+          </MathProblem>
+          <MathSolution>
+            <MathSolutionTitle>Çözüm:</MathSolutionTitle>
+            <MathSolutionText>{solution}</MathSolutionText>
+          </MathSolution>
+        </>
+      );
+    }
+    
+    return <MessageText>{text}</MessageText>;
+  };
+
   return (
     <MessageContainer
+      ref={messageRef}
+      isUser={isUser}
+      isError={isError}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      style={{ justifyContent: isUser ? 'flex-end' : 'flex-start' }}
     >
-      {!isUser && (
-        <Avatar isUser={isUser} isError={isError}>
-          {isError ? <FaExclamationTriangle /> : <FaRobot />}
-        </Avatar>
-      )}
-      
-      <MessageContent isUser={isUser} isError={isError}>
-        <MessageText dangerouslySetInnerHTML={{ __html: formattedText }} />
-        
-        {!isUser && (
-          <CopyButton onClick={copyToClipboard}>
-            {copied ? <FaCheck /> : <FaCopy />}
-          </CopyButton>
-        )}
+      <Avatar isUser={isUser}>
+        {isUser ? <FaUser /> : <FaRobot />}
+      </Avatar>
+      <MessageContent>
+        <MessageHeader>
+          <SenderName>{isUser ? 'Sen' : 'CesAI'}</SenderName>
+          {!isUser && !isImage && (
+            <CopyButton onClick={copyToClipboard}>
+              {copied ? <FaCheck /> : <FaCopy />}
+            </CopyButton>
+          )}
+        </MessageHeader>
+        {renderContent()}
       </MessageContent>
-      
-      {isUser && (
-        <Avatar isUser={isUser}>
-          <FaUser />
-        </Avatar>
-      )}
     </MessageContainer>
   );
 };
