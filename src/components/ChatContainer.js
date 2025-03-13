@@ -69,26 +69,43 @@ const AnimatedTitle = styled(motion.h1)`
 
 const MessagesContainer = styled.div`
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1rem;
   margin-top: 60px;
   margin-bottom: 180px;
   height: calc(100vh - 240px);
+  max-height: calc(100vh - 240px);
   scroll-behavior: smooth;
   overscroll-behavior: contain;
+  position: relative;
+  -webkit-overflow-scrolling: touch; /* iOS için daha iyi kaydırma */
   
+  /* Kaydırma çubuğu stillerini güncelliyoruz */
   &::-webkit-scrollbar {
-    width: 8px;
+    width: 10px;
   }
   
   &::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.3);
     border-radius: 4px;
+    border: 2px solid rgba(0, 0, 0, 0.1);
   }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  
+  /* Firefox için kaydırma çubuğu stilleri */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.1);
 `;
 
 const InputSection = styled.div`
@@ -358,7 +375,21 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
   }, [conversationId]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const messagesContainer = messagesContainerRef.current;
+    if (messagesContainer) {
+      // Daha güçlü bir kaydırma yöntemi
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: 'smooth'
+      });
+      
+      // Yedek yöntem (bazı tarayıcılarda scrollTo çalışmayabilir)
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 50);
+    }
   };
 
   // Scroll to bottom when messages change
@@ -368,17 +399,24 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
 
   // Fare tekerleği ile kaydırma için event listener
   useEffect(() => {
-    const handleWheel = (e) => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop += e.deltaY;
-      }
-    };
-
     const messagesContainer = messagesContainerRef.current;
-    if (messagesContainer) {
-      messagesContainer.addEventListener('wheel', handleWheel, { passive: true });
-    }
-
+    
+    if (!messagesContainer) return;
+    
+    // Fare tekerleği olayını dinleyen fonksiyon
+    const handleWheel = (e) => {
+      // Varsayılan davranışı engelleme
+      e.preventDefault();
+      
+      // Kaydırma miktarını ayarlama
+      const scrollAmount = e.deltaY * 0.5; // Kaydırma hızını ayarla
+      messagesContainer.scrollTop += scrollAmount;
+    };
+    
+    // Pasif olmayan bir event listener ekle (preventDefault kullanabilmek için)
+    messagesContainer.addEventListener('wheel', handleWheel, { passive: false });
+    
+    // Temizleme fonksiyonu
     return () => {
       if (messagesContainer) {
         messagesContainer.removeEventListener('wheel', handleWheel);
@@ -408,6 +446,51 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       }
     };
   }, []);
+
+  // Dokunmatik ekranlar ve trackpad'ler için kaydırma işlevi
+  useEffect(() => {
+    const messagesContainer = messagesContainerRef.current;
+    
+    if (!messagesContainer) return;
+    
+    let touchStartY = 0;
+    let touchEndY = 0;
+    
+    // Dokunma başlangıcı
+    const handleTouchStart = (e) => {
+      touchStartY = e.touches[0].clientY;
+    };
+    
+    // Dokunma hareketi
+    const handleTouchMove = (e) => {
+      touchEndY = e.touches[0].clientY;
+      const touchDiff = touchStartY - touchEndY;
+      messagesContainer.scrollTop += touchDiff * 0.5;
+      touchStartY = touchEndY;
+    };
+    
+    // Event listener'ları ekle
+    messagesContainer.addEventListener('touchstart', handleTouchStart, { passive: true });
+    messagesContainer.addEventListener('touchmove', handleTouchMove, { passive: true });
+    
+    // Temizleme fonksiyonu
+    return () => {
+      messagesContainer.removeEventListener('touchstart', handleTouchStart);
+      messagesContainer.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, []);
+
+  // Otomatik kaydırma mantığını iyileştir
+  useEffect(() => {
+    // Yeni mesaj eklendiğinde otomatik olarak aşağı kaydır
+    if (messages.length > 0) {
+      // Küçük bir gecikme ile kaydırma işlemini gerçekleştir
+      // Bu, DOM'un güncellenme şansı verir
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+    }
+  }, [messages]);
 
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
