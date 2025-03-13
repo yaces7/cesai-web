@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
 import ChatMessage from './ChatMessage';
-import { FaPaperPlane, FaImage, FaPlus, FaMicrophone, FaBars, FaArrowDown, FaTimes } from 'react-icons/fa';
+import { FaPaperPlane, FaImage, FaPlus, FaMicrophone, FaBars, FaArrowDown, FaTimes, FaExclamationTriangle, FaUpload, FaPaperclip, FaSpinner } from 'react-icons/fa';
 
 const Container = styled.div`
   width: 100%;
@@ -309,7 +309,7 @@ const RemoveImageButton = styled.button`
   }
 `;
 
-const AttachmentOptions = styled(motion.div)`
+const AttachmentOptions = styled.div`
   position: absolute;
   bottom: 60px;
   left: 1rem;
@@ -347,6 +347,69 @@ const TypewriterText = styled.div`
   user-select: text;
 `;
 
+const ErrorMessage = styled.div`
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 10px 15px;
+  margin: 10px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  
+  svg {
+    margin-right: 8px;
+  }
+`;
+
+const CloseButton = styled.button`
+  background: none;
+  border: none;
+  color: #721c24;
+  font-size: 20px;
+  cursor: pointer;
+  margin-left: 10px;
+`;
+
+const ImagePreviewActions = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 10px;
+`;
+
+const Button = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 15px;
+  border-radius: 5px;
+  border: none;
+  background-color: #4a90e2;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  
+  &:hover {
+    background-color: #357ae8;
+  }
+  
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
+  
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
 const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -356,6 +419,8 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showAttachOptions, setShowAttachOptions] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
@@ -572,12 +637,15 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       setIsUploading(true);
       
       try {
-        // CORS hatalarını önlemek için mode: 'cors' ve credentials: 'include' ekleyelim
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
+        console.log("Fotoğraf yükleniyor...");
+        console.log("API URL:", `${process.env.REACT_APP_API_URL}/upload-image`);
+        
+        // CORS hatalarını önlemek için ayarlar
+        const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
           },
           body: JSON.stringify({ 
             image: selectedImage,
@@ -588,11 +656,16 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           credentials: 'include'
         });
         
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
+        console.log("Yanıt durumu:", uploadResponse.status);
+        
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          console.error("Sunucu hatası:", errorText);
+          throw new Error(`HTTP error! Status: ${uploadResponse.status}. Details: ${errorText}`);
         }
         
-        const data = await response.json();
+        const data = await uploadResponse.json();
+        console.log("Yanıt alındı:", data);
         
         // Yükleme durumunu kaldır
         setIsUploading(false);
@@ -613,7 +686,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         console.error('Error uploading image:', error);
         setIsUploading(false);
         setMessages(prev => [...prev, { 
-          text: "Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin. Hata: " + error.message, 
+          text: `Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin. Hata: ${error.message}`, 
           isUser: false,
           isError: true
         }]);
@@ -710,62 +783,140 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     }
   };
 
-  const handleImageUpload = (e) => {
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Dosya türünü kontrol et
-    if (!file.type.startsWith('image/')) {
-      alert('Lütfen bir görüntü dosyası seçin (JPEG, PNG, vb.)');
-      return;
-    }
-    
-    // Dosya boyutunu kontrol et (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Dosya boyutu çok büyük. Lütfen 5MB\'dan küçük bir dosya seçin.');
-      return;
-    }
-    
-    // Dosyayı base64'e dönüştür
-    const reader = new FileReader();
-    
-    reader.onload = (event) => {
-      try {
-        const base64Image = event.target.result;
-        
-        // Base64 formatını kontrol et
-        if (!base64Image || typeof base64Image !== 'string' || !base64Image.startsWith('data:image/')) {
-          throw new Error('Geçersiz görüntü formatı');
-        }
-        
-        // Görüntü boyutunu kontrol et (base64 olarak)
-        if (base64Image.length > 7 * 1024 * 1024) { // ~7MB (base64 daha büyük olur)
-          throw new Error('Görüntü boyutu çok büyük');
-        }
-        
-        setSelectedImage(base64Image);
-        setShowAttachOptions(false);
-      } catch (error) {
-        console.error('Görüntü yükleme hatası:', error);
-        alert(`Görüntü yüklenirken bir hata oluştu: ${error.message}`);
-      }
-    };
-    
-    reader.onerror = (error) => {
-      console.error('Dosya okuma hatası:', error);
-      alert('Dosya okuma hatası. Lütfen tekrar deneyin.');
-    };
-    
-    // Hata yakalama ile dosyayı oku
+
     try {
-      reader.readAsDataURL(file);
+      console.log("Dosya seçildi:", file.name, "Boyut:", file.size, "Tip:", file.type);
+      
+      // Dosya türünü kontrol et
+      if (!file.type.startsWith('image/')) {
+        setError("Lütfen sadece resim dosyası yükleyin.");
+        e.target.value = null; // Dosya seçimini sıfırla
+        return;
+      }
+      
+      // Dosya boyutunu kontrol et (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Dosya boyutu 5MB'dan küçük olmalıdır.");
+        e.target.value = null; // Dosya seçimini sıfırla
+        return;
+      }
+
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        try {
+          const base64 = event.target.result;
+          
+          // Base64 formatını kontrol et
+          if (!base64 || !base64.startsWith('data:image/')) {
+            throw new Error("Geçersiz görüntü formatı.");
+          }
+          
+          // Base64 boyutunu kontrol et (yaklaşık 7MB)
+          if (base64.length > 7 * 1024 * 1024) {
+            throw new Error("Görüntü boyutu çok büyük.");
+          }
+          
+          setSelectedImage(base64);
+          console.log("Görüntü base64'e dönüştürüldü. Uzunluk:", base64.length);
+        } catch (error) {
+          console.error("Base64 dönüşüm hatası:", error);
+          setError(`Görüntü işlenirken hata oluştu: ${error.message}`);
+          setSelectedImage(null);
+        }
+      };
+      
+      reader.onerror = (error) => {
+        console.error("Dosya okuma hatası:", error);
+        setError("Dosya okunamadı. Lütfen tekrar deneyin.");
+        setSelectedImage(null);
+      };
+      
+      try {
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error("Dosya okuma hatası:", error);
+        setError(`Dosya okunamadı: ${error.message}`);
+      }
+      
+      // Dosya seçimini sıfırla (aynı dosyayı tekrar seçebilmek için)
+      e.target.value = null;
     } catch (error) {
-      console.error('Dosya okuma hatası:', error);
-      alert(`Dosya okuma hatası: ${error.message}`);
+      console.error("Genel hata:", error);
+      setError(`Beklenmeyen bir hata oluştu: ${error.message}`);
+      setSelectedImage(null);
+      e.target.value = null; // Dosya seçimini sıfırla
     }
+  };
+
+  const handleImageUpload = async () => {
+    if (!selectedImage) {
+      setError("Lütfen bir görüntü seçin.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
     
-    // Dosya seçiciyi sıfırla (aynı dosyayı tekrar seçebilmek için)
-    e.target.value = null;
+    try {
+      console.log("Görüntü yükleniyor...");
+      console.log("API URL:", process.env.REACT_APP_API_URL);
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+        credentials: 'include',
+        body: JSON.stringify({
+          image: selectedImage,
+          conversation_context: messages.map(msg => ({
+            text: msg.text,
+            isUser: msg.isUser
+          }))
+        }),
+      });
+      
+      console.log("Sunucu yanıtı alındı. Durum:", response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Sunucu hatası: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.response) {
+        throw new Error("Sunucudan geçersiz yanıt alındı.");
+      }
+      
+      // Kullanıcı mesajını ve yanıtı ekle
+      const userMessage = {
+        text: "[Görüntü yüklendi]",
+        isUser: true,
+        timestamp: new Date().toISOString(),
+      };
+      
+      const aiResponse = {
+        text: data.response,
+        isUser: false,
+        timestamp: new Date().toISOString(),
+      };
+      
+      setMessages(prevMessages => [...prevMessages, userMessage, aiResponse]);
+      setSelectedImage(null);
+      
+      console.log("Görüntü başarıyla işlendi ve yanıt alındı.");
+    } catch (error) {
+      console.error("Görüntü yükleme hatası:", error);
+      setError(`Görüntü yüklenirken bir hata oluştu: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const triggerImageUpload = () => {
@@ -855,23 +1006,36 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         </ScrollToBottomButton>
       )}
 
+      {error && (
+        <ErrorMessage>
+          <FaExclamationTriangle /> {error}
+          <CloseButton onClick={() => setError(null)}>×</CloseButton>
+        </ErrorMessage>
+      )}
+      
+      {selectedImage && (
+        <ImagePreviewContainer>
+          <ImagePreview src={selectedImage} alt="Yüklenecek görüntü" />
+          <ImagePreviewActions>
+            <Button onClick={handleImageUpload} disabled={loading}>
+              {loading ? <FaSpinner className="spinner" /> : <FaUpload />} 
+              {loading ? 'Yükleniyor...' : 'Gönder'}
+            </Button>
+            <Button onClick={() => setSelectedImage(null)} disabled={loading}>
+              <FaTimes /> İptal
+            </Button>
+          </ImagePreviewActions>
+        </ImagePreviewContainer>
+      )}
+
       <InputSection>
-        {selectedImage && (
-          <ImagePreviewContainer>
-            <ImagePreview src={selectedImage} alt="Yüklenecek görüntü" />
-            <RemoveImageButton onClick={removeSelectedImage}>
-              <FaTimes />
-            </RemoveImageButton>
-          </ImagePreviewContainer>
-        )}
-        
         <InputContainer onSubmit={handleSubmit}>
           <AttachButton 
             type="button"
             onClick={toggleAttachOptions}
             whileTap={{ scale: 0.9 }}
           >
-            <FaPlus />
+            <FaPaperclip />
           </AttachButton>
           
           {showAttachOptions && (
@@ -898,18 +1062,19 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           <SendButton
             type="submit"
             whileTap={{ scale: 0.9 }}
-            disabled={!input.trim() && !selectedImage}
+            disabled={!input.trim() && !selectedImage || loading}
           >
-            <FaPaperPlane />
+            {loading ? <FaSpinner className="spinner" /> : <FaPaperPlane />}
           </SendButton>
         </InputContainer>
         
         <input
+          id="file-input"
           type="file"
           ref={fileInputRef}
           style={{ display: 'none' }}
           accept="image/*"
-          onChange={handleImageUpload}
+          onChange={handleFileChange}
         />
         
         {remainingRequests <= 10 && (
