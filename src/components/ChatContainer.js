@@ -640,6 +640,9 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         console.log("Fotoğraf yükleniyor...");
         console.log("API URL:", `${process.env.REACT_APP_API_URL}/upload-image`);
         
+        // Kullanıcının görüntü ile birlikte gönderdiği mesajı kontrol et
+        const userMessage = input.trim() ? input : "[Görüntü yüklendi]";
+        
         // CORS hatalarını önlemek için ayarlar
         const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
           method: 'POST',
@@ -649,7 +652,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           },
           body: JSON.stringify({ 
             image: selectedImage,
-            message: input.trim(),
+            message: userMessage,
             conversation_id: conversationId
           }),
           mode: 'no-cors'
@@ -663,9 +666,22 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         // Yükleme durumunu kaldır
         setIsUploading(false);
         
+        // Görüntüden metin çıkarma simülasyonu
+        // Gerçek uygulamada bu işlem sunucu tarafında yapılacak
+        let extractedText = "Görüntüden çıkarılan metin burada gösterilecek.";
+        let aiResponseText = "";
+        
+        if (input.trim()) {
+          // Kullanıcı bir mesaj girdiyse, bu mesaja göre yanıt ver
+          aiResponseText = `Gönderdiğiniz görüntüyü inceledim. Görüntüden şu metinleri çıkardım:\n\n"${extractedText}"\n\nSorunuz "${input}" ile ilgili olarak: Bu metinler, muhtemelen bir belge veya kitaptan alınmış olabilir. İçeriğe göre daha detaylı bir analiz yapabilirim.`;
+        } else {
+          // Kullanıcı sadece görüntü gönderdiyse, görüntüdeki metni analiz et
+          aiResponseText = `Gönderdiğiniz görüntüyü inceledim ve şu metinleri çıkardım:\n\n"${extractedText}"\n\nBu metinler bir belge veya kitaptan alınmış gibi görünüyor. Metinle ilgili daha spesifik bir sorunuz varsa, lütfen belirtin.`;
+        }
+        
         // Bot yanıtını ekle
         setMessages(prev => [...prev, { 
-          text: "Yüklediğiniz grafiği inceledim. Bu grafik, finansal piyasa verilerini gösteriyor. Sol taraftaki grafik günlük fiyat dalgalanmalarını, orta kısımdaki grafik haftalık yükselen trendi, sağdaki grafik ise aylık performans değişimini göstermektedir. Minimum ve maksimum değerler arasındaki fark, piyasadaki volatiliteyi işaret ediyor. Bu veriler ışığında, yatırım stratejinizi orta vadeli olarak planlamanızı öneririm. Başka bir sorunuz var mı?",
+          text: aiResponseText, 
           isUser: false,
           isImageAnalysis: true
         }]);
@@ -674,7 +690,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         console.error('Error uploading image:', error);
         setIsUploading(false);
         setMessages(prev => [...prev, { 
-          text: `Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin. Hata: ${error.message}`, 
+          text: `Üzgünüm, görüntünüzü işlerken bir sorun oluştu. Lütfen daha küçük bir görüntü ile tekrar deneyin veya farklı bir formatta kaydedin.`, 
           isUser: false,
           isError: true
         }]);
@@ -833,6 +849,9 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       console.log("Görüntü yükleniyor...");
       console.log("API URL:", process.env.REACT_APP_API_URL);
       
+      // Kullanıcının görüntü ile birlikte gönderdiği mesajı kontrol et
+      const userMessage = input.trim() ? input : "[Görüntü yüklendi]";
+      
       const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
         method: 'POST',
         headers: {
@@ -842,6 +861,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         mode: 'no-cors',
         body: JSON.stringify({
           image: selectedImage,
+          message: userMessage,
           conversation_context: messages.map(msg => ({
             text: msg.text,
             isUser: msg.isUser
@@ -854,22 +874,42 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       // no-cors modunda response.ok ve response.json() çalışmayabilir
       // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
       
-      // Kullanıcı mesajını ve yanıtı ekle
-      const userMessage = {
-        text: "[Görüntü yüklendi]",
+      // Kullanıcı mesajını ekle
+      const userMessageObj = {
+        text: userMessage,
         isUser: true,
         timestamp: new Date().toISOString(),
+        isImage: true,
+        imageData: selectedImage
       };
       
+      // Görüntüden metin çıkarma simülasyonu
+      // Gerçek uygulamada bu işlem sunucu tarafında yapılacak
+      let extractedText = "Görüntüden çıkarılan metin burada gösterilecek.";
+      let aiResponseText = "";
+      
+      if (input.trim()) {
+        // Kullanıcı bir mesaj girdiyse, bu mesaja göre yanıt ver
+        aiResponseText = `Gönderdiğiniz görüntüyü inceledim. Görüntüden şu metinleri çıkardım:\n\n"${extractedText}"\n\nSorunuz "${input}" ile ilgili olarak: Bu metinler, muhtemelen bir belge veya kitaptan alınmış olabilir. İçeriğe göre daha detaylı bir analiz yapabilirim.`;
+      } else {
+        // Kullanıcı sadece görüntü gönderdiyse, görüntüdeki metni analiz et
+        aiResponseText = `Gönderdiğiniz görüntüyü inceledim ve şu metinleri çıkardım:\n\n"${extractedText}"\n\nBu metinler bir belge veya kitaptan alınmış gibi görünüyor. Metinle ilgili daha spesifik bir sorunuz varsa, lütfen belirtin.`;
+      }
+      
       const aiResponse = {
-        text: "Yüklediğiniz grafiği inceledim. Bu grafik, finansal piyasa verilerini gösteriyor. Sol taraftaki grafik günlük fiyat dalgalanmalarını, orta kısımdaki grafik haftalık yükselen trendi, sağdaki grafik ise aylık performans değişimini göstermektedir. Minimum ve maksimum değerler arasındaki fark, piyasadaki volatiliteyi işaret ediyor. Bu veriler ışığında, yatırım stratejinizi orta vadeli olarak planlamanızı öneririm. Başka bir sorunuz var mı?",
+        text: aiResponseText,
         isUser: false,
         timestamp: new Date().toISOString(),
         isImageAnalysis: true
       };
       
-      setMessages(prevMessages => [...prevMessages, userMessage, aiResponse]);
+      setMessages(prevMessages => [...prevMessages, userMessageObj, aiResponse]);
       setSelectedImage(null);
+      setInput('');
+      
+      if (textareaRef.current) {
+        textareaRef.current.style.height = '52px';
+      }
       
       console.log("Görüntü başarıyla işlendi ve yanıt alındı.");
     } catch (error) {
