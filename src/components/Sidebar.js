@@ -217,7 +217,8 @@ const Sidebar = ({
   onLogout,
   isMobileOpen,
   setIsMobileOpen,
-  remainingRequests
+  remainingRequests,
+  isMobile
 }) => {
   // Format date for display
   const formatDate = (dateString) => {
@@ -235,7 +236,7 @@ const Sidebar = ({
     <SidebarContainer 
       initial={false}
       animate={isMobileOpen ? "open" : "closed"}
-      variants={variants}
+      variants={isMobile ? variants : {}}
       transition={{ duration: 0.3 }}
     >
       <NewChatButton 

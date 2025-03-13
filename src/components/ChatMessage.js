@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
-import { FaUser, FaRobot, FaExclamationTriangle } from 'react-icons/fa';
+import { FaUser, FaRobot, FaExclamationTriangle, FaCopy, FaCheck } from 'react-icons/fa';
 
 const MessageContainer = styled(motion.div)`
   display: flex;
@@ -49,6 +49,7 @@ const MessageContent = styled.div`
   padding: 1rem;
   color: #E8DFD8;
   max-width: 80%;
+  position: relative;
   
   @media (max-width: 768px) {
     max-width: 90%;
@@ -59,6 +60,7 @@ const MessageText = styled.div`
   white-space: pre-wrap;
   line-height: 1.5;
   font-size: 1rem;
+  user-select: text;
   
   a {
     color: #4F9BFF;
@@ -91,7 +93,36 @@ const MessageText = styled.div`
   }
 `;
 
+const CopyButton = styled.button`
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  border-radius: 4px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  
+  &:hover {
+    background: rgba(0, 0, 0, 0.3);
+    color: rgba(255, 255, 255, 0.9);
+  }
+  
+  ${MessageContent}:hover & {
+    opacity: 1;
+  }
+`;
+
 const ChatMessage = ({ text, isUser, isError }) => {
+  const [copied, setCopied] = useState(false);
+  
   // Function to convert URLs to clickable links
   const formatText = (text) => {
     // URL regex pattern
@@ -118,6 +149,14 @@ const ChatMessage = ({ text, isUser, isError }) => {
   // Format the message text
   const formattedText = formatText(text);
   
+  // Copy message text to clipboard
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  
   return (
     <MessageContainer
       initial={{ opacity: 0, y: 20 }}
@@ -133,6 +172,12 @@ const ChatMessage = ({ text, isUser, isError }) => {
       
       <MessageContent isUser={isUser} isError={isError}>
         <MessageText dangerouslySetInnerHTML={{ __html: formattedText }} />
+        
+        {!isUser && (
+          <CopyButton onClick={copyToClipboard}>
+            {copied ? <FaCheck /> : <FaCopy />}
+          </CopyButton>
+        )}
       </MessageContent>
       
       {isUser && (

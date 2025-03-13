@@ -73,6 +73,7 @@ const MessagesContainer = styled.div`
   padding: 1rem;
   margin-top: 60px;
   margin-bottom: 180px;
+  height: calc(100vh - 240px);
   
   &::-webkit-scrollbar {
     width: 8px;
@@ -236,6 +237,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -337,7 +339,13 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           <MobileMenuButton onClick={toggleSidebar}>
             <FaBars />
           </MobileMenuButton>
-          <AnimatedTitle>CesAI</AnimatedTitle>
+          <AnimatedTitle
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            CesAI
+          </AnimatedTitle>
         </HeaderLeft>
         <HeaderRight>
           <ToolButton data-tooltip="Dil Seçimi">
@@ -346,12 +354,12 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         </HeaderRight>
       </Header>
 
-      <MessagesContainer>
+      <MessagesContainer ref={messagesEndRef}>
         {messages.map((message, index) => (
           <ChatMessage 
-            key={index} 
-            text={message.text} 
-            isUser={message.isUser} 
+            key={index}
+            text={message.text}
+            isUser={message.isUser}
             isError={message.isError}
           />
         ))}
@@ -372,8 +380,6 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
             />
           </TypingIndicator>
         )}
-        
-        <div ref={messagesEndRef} />
       </MessagesContainer>
 
       <InputSection>

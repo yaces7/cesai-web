@@ -28,6 +28,7 @@ function App() {
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [remainingRequests, setRemainingRequests] = useState(100);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -40,6 +41,14 @@ function App() {
       // Fetch conversations from API
       fetchConversations(token);
     }
+    
+    // Ekran boyutunu izle
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const fetchConversations = async (token) => {
@@ -104,9 +113,10 @@ function App() {
             setCurrentConversation={setCurrentConversation}
             createNewConversation={createNewConversation}
             onLogout={handleLogout}
-            isMobileOpen={isMobileSidebarOpen}
+            isMobileOpen={isMobile ? isMobileSidebarOpen : true}
             setIsMobileOpen={setIsMobileSidebarOpen}
             remainingRequests={remainingRequests}
+            isMobile={isMobile}
           />
         )}
         <MainContent>
