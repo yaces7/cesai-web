@@ -106,6 +106,24 @@ const MessageText = styled.div`
   }
 `;
 
+const TypewriterCursor = styled.span`
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: #E8DFD8;
+  margin-left: 2px;
+  animation: blink 1s step-end infinite;
+  
+  @keyframes blink {
+    from, to {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+`;
+
 const CopyButton = styled.button`
   position: absolute;
   top: 0.5rem;
@@ -214,7 +232,7 @@ const MathSolutionText = styled.div`
   line-height: 1.5;
 `;
 
-const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysis }) => {
+const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysis, isTyping }) => {
   const [copied, setCopied] = useState(false);
   const [formattedText, setFormattedText] = useState('');
   const messageRef = useRef(null);
@@ -314,6 +332,16 @@ const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysi
       );
     }
     
+    // Daktilo efekti için
+    if (isTyping) {
+      return (
+        <MessageText>
+          {text}
+          <TypewriterCursor />
+        </MessageText>
+      );
+    }
+    
     return <MessageText>{text}</MessageText>;
   };
 
@@ -332,7 +360,7 @@ const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysi
       <MessageContent>
         <MessageHeader>
           <SenderName isUser={isUser}>{isUser ? 'Sen' : 'CesAI'}</SenderName>
-          {!isUser && !isImage && (
+          {!isUser && !isImage && !isTyping && (
             <CopyButton onClick={copyToClipboard}>
               {copied ? <FaCheck /> : <FaCopy />}
             </CopyButton>

@@ -75,6 +75,7 @@ const MessagesContainer = styled.div`
   margin-bottom: 180px;
   height: calc(100vh - 240px);
   scroll-behavior: smooth;
+  overscroll-behavior: contain;
   
   &::-webkit-scrollbar {
     width: 8px;
@@ -321,6 +322,14 @@ const AttachmentOption = styled.button`
   }
 `;
 
+// Daktilo efekti için yeni bileşen
+const TypewriterText = styled.div`
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 1rem;
+  user-select: text;
+`;
+
 const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -357,13 +366,33 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     scrollToBottom();
   }, [messages]);
 
-  // Check scroll position to show/hide scroll button
+  // Fare tekerleği ile kaydırma için event listener
+  useEffect(() => {
+    const handleWheel = (e) => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop += e.deltaY;
+      }
+    };
+
+    const messagesContainer = messagesContainerRef.current;
+    if (messagesContainer) {
+      messagesContainer.addEventListener('wheel', handleWheel, { passive: true });
+    }
+
+    return () => {
+      if (messagesContainer) {
+        messagesContainer.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, []);
+
+  // Scroll pozisyonunu kontrol et
   useEffect(() => {
     const handleScroll = () => {
       if (!messagesContainerRef.current) return;
       
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      // Show button when scrolled up more than 200px from bottom
+      // 200px'den fazla yukarı kaydırıldığında butonu göster
       const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
       setShowScrollButton(isScrolledUp);
     };
@@ -388,16 +417,64 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     }
   };
 
+  // Daktilo efekti için yeni fonksiyon
+  const typewriterEffect = async (response, messageId) => {
+    const fullText = response;
+    let currentText = '';
+    
+    // Karakterleri tek tek ekle
+    for (let i = 0; i < fullText.length; i++) {
+      currentText += fullText[i];
+      
+      // Mesajı güncelle
+      setMessages(prev => 
+        prev.map((msg, idx) => 
+          idx === messageId ? { ...msg, text: currentText, isTyping: true } : msg
+        )
+      );
+      
+      // Rastgele gecikme (daha doğal görünmesi için)
+      const delay = Math.random() * 10 + 10; // 10-20ms arası
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    
+    // Yazma tamamlandığında isTyping'i false yap
+    setMessages(prev => 
+      prev.map((msg, idx) => 
+        idx === messageId ? { ...msg, isTyping: false } : msg
+      )
+    );
+  };
+
   const streamResponse = async (response) => {
+    // Cümlelere ayır
     const sentences = response.match(/[^.!?]+[.!?]+/g) || [response];
     
-    for (let sentence of sentences) {
-      sentence = sentence.trim();
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i].trim();
       if (sentence) {
-        const delay = Math.min(sentence.length * 20, 1000);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        // Boş mesaj ekle
+        setMessages(prev => {
+          const newMessages = [...prev, { 
+            text: '', 
+            isUser: false, 
+            isTyping: true,
+            fullText: sentence
+          }];
+          return newMessages;
+        });
         
-        setMessages(prev => [...prev, { text: sentence, isUser: false }]);
+        // Kısa bir gecikme
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Daktilo efekti başlat
+        const messageId = messages.length;
+        typewriterEffect(sentence, messageId);
+        
+        // Cümleler arasında kısa bir bekleme
+        if (i < sentences.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
     }
   };
@@ -515,8 +592,15 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           isMath: true
         }]);
       } else {
-        // For regular responses, stream them
-        await streamResponse(data.response);
+        // For regular responses, use typewriter effect
+        const messageId = messages.length;
+        setMessages(prev => [...prev, { 
+          text: '', 
+          isUser: false,
+          isTyping: true
+        }]);
+        
+        typewriterEffect(data.response, messageId);
       }
       
       // Update remaining requests
@@ -624,6 +708,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
             isImage={message.isImage}
             imageData={message.imageData}
             isImageAnalysis={message.isImageAnalysis}
+            isTyping={message.isTyping}
           />
         ))}
         
