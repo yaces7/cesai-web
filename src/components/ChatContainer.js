@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
 import ChatMessage from './ChatMessage';
-import { FaPaperPlane, FaImage, FaGift, FaMicrophone, FaBars, FaArrowDown } from 'react-icons/fa';
+import { FaPaperPlane, FaImage, FaPlus, FaMicrophone, FaBars, FaArrowDown, FaTimes } from 'react-icons/fa';
 
 const Container = styled.div`
   width: 100%;
@@ -109,12 +109,15 @@ const InputContainer = styled.form`
   border-radius: 1rem;
   border: 1px solid rgba(255,255,255,0.1);
   box-shadow: 0 0 15px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
 `;
 
 const Input = styled.textarea`
   width: 100%;
   padding: 1rem;
   padding-right: 3rem;
+  padding-left: ${props => props.hasAttachment ? '3rem' : '1rem'};
   background: transparent;
   border: none;
   color: #E8DFD8;
@@ -136,6 +139,21 @@ const Input = styled.textarea`
 const SendButton = styled(motion.button)`
   position: absolute;
   right: 1rem;
+  bottom: 0.8rem;
+  background: transparent;
+  border: none;
+  color: #E8DFD8;
+  cursor: pointer;
+  opacity: 0.7;
+  
+  &:hover {
+    opacity: 1;
+  }
+`;
+
+const AttachButton = styled(motion.button)`
+  position: absolute;
+  left: 1rem;
   bottom: 0.8rem;
   background: transparent;
   border: none;
@@ -235,6 +253,74 @@ const ScrollToBottomButton = styled(motion.button)`
   }
 `;
 
+const ImagePreviewContainer = styled.div`
+  position: relative;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  max-width: 150px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.2);
+`;
+
+const ImagePreview = styled.img`
+  width: 100%;
+  height: auto;
+  max-height: 100px;
+  object-fit: cover;
+`;
+
+const RemoveImageButton = styled.button`
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  
+  &:hover {
+    background: rgba(255,0,0,0.8);
+  }
+`;
+
+const AttachmentOptions = styled(motion.div)`
+  position: absolute;
+  bottom: 60px;
+  left: 1rem;
+  background: rgba(30, 30, 40, 0.95);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 100;
+`;
+
+const AttachmentOption = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: #E8DFD8;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  
+  &:hover {
+    background: rgba(255,255,255,0.1);
+  }
+`;
+
 const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -242,6 +328,8 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
   const [remainingRequests, setRemainingRequests] = useState(100);
   const [isUploading, setIsUploading] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [showAttachOptions, setShowAttachOptions] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
@@ -316,7 +404,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() && !selectedImage) return;
 
     // Check if user has reached the request limit
     if (remainingRequests <= 0) {
@@ -328,6 +416,70 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       return;
     }
 
+    // Eğer seçili bir görüntü varsa
+    if (selectedImage) {
+      // Kullanıcı mesajını ekle
+      setMessages(prev => [...prev, { 
+        text: input.trim() ? input : '[Görüntü yüklendi]', 
+        isUser: true,
+        isImage: true,
+        imageData: selectedImage
+      }]);
+      
+      setInput('');
+      setSelectedImage(null);
+      
+      if (textareaRef.current) {
+        textareaRef.current.style.height = '52px';
+      }
+
+      setIsUploading(true);
+      
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ 
+            image: selectedImage,
+            message: input.trim(),
+            conversation_id: conversationId
+          })
+        });
+        
+        const data = await response.json();
+        
+        // Yükleme durumunu kaldır
+        setIsUploading(false);
+        
+        // Bot yanıtını ekle
+        setMessages(prev => [...prev, { 
+          text: data.response, 
+          isUser: false,
+          isImageAnalysis: true
+        }]);
+        
+        // Kalan istek sayısını güncelle
+        const newRemainingRequests = data.remaining_requests;
+        setRemainingRequests(newRemainingRequests);
+        updateRemainingRequests(newRemainingRequests);
+        
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        setIsUploading(false);
+        setMessages(prev => [...prev, { 
+          text: "Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin.", 
+          isUser: false,
+          isError: true
+        }]);
+      }
+      
+      return;
+    }
+
+    // Normal metin mesajı gönderme
     setMessages(prev => [...prev, { text: input, isUser: true }]);
     setInput('');
     if (textareaRef.current) {
@@ -413,62 +565,14 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     
     // Dosyayı base64'e dönüştür
     const reader = new FileReader();
-    reader.onloadstart = () => setIsUploading(true);
     
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       const base64Image = event.target.result;
-      
-      // Kullanıcı mesajını ekle
-      setMessages(prev => [...prev, { 
-        text: '[Görüntü yüklendi]', 
-        isUser: true,
-        isImage: true,
-        imageData: base64Image
-      }]);
-      
-      try {
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          body: JSON.stringify({ 
-            image: base64Image,
-            conversation_id: conversationId
-          })
-        });
-        
-        const data = await response.json();
-        
-        // Yükleme durumunu kaldır
-        setIsUploading(false);
-        
-        // Bot yanıtını ekle
-        setMessages(prev => [...prev, { 
-          text: data.response, 
-          isUser: false,
-          isImageAnalysis: true
-        }]);
-        
-        // Kalan istek sayısını güncelle
-        const newRemainingRequests = data.remaining_requests;
-        setRemainingRequests(newRemainingRequests);
-        updateRemainingRequests(newRemainingRequests);
-        
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        setIsUploading(false);
-        setMessages(prev => [...prev, { 
-          text: "Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin.", 
-          isUser: false,
-          isError: true
-        }]);
-      }
+      setSelectedImage(base64Image);
+      setShowAttachOptions(false);
     };
     
     reader.onerror = () => {
-      setIsUploading(false);
       alert('Dosya okuma hatası. Lütfen tekrar deneyin.');
     };
     
@@ -480,6 +584,14 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
 
   const triggerImageUpload = () => {
     fileInputRef.current.click();
+  };
+  
+  const removeSelectedImage = () => {
+    setSelectedImage(null);
+  };
+  
+  const toggleAttachOptions = () => {
+    setShowAttachOptions(prev => !prev);
   };
 
   return (
@@ -557,7 +669,36 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       )}
 
       <InputSection>
+        {selectedImage && (
+          <ImagePreviewContainer>
+            <ImagePreview src={selectedImage} alt="Yüklenecek görüntü" />
+            <RemoveImageButton onClick={removeSelectedImage}>
+              <FaTimes />
+            </RemoveImageButton>
+          </ImagePreviewContainer>
+        )}
+        
         <InputContainer onSubmit={handleSubmit}>
+          <AttachButton 
+            type="button"
+            onClick={toggleAttachOptions}
+            whileTap={{ scale: 0.9 }}
+          >
+            <FaPlus />
+          </AttachButton>
+          
+          {showAttachOptions && (
+            <AttachmentOptions
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+            >
+              <AttachmentOption onClick={triggerImageUpload}>
+                <FaImage /> Fotoğraf Yükle
+              </AttachmentOption>
+            </AttachmentOptions>
+          )}
+          
           <Input
             ref={textareaRef}
             value={input}
@@ -565,37 +706,24 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
             onKeyDown={handleKeyDown}
             placeholder="Bir mesaj yazın..."
             rows={1}
+            hasAttachment={true}
           />
           <SendButton
             type="submit"
             whileTap={{ scale: 0.9 }}
-            disabled={!input.trim()}
+            disabled={!input.trim() && !selectedImage}
           >
             <FaPaperPlane />
           </SendButton>
         </InputContainer>
         
-        <ToolsContainer>
-          <ToolButton 
-            data-tooltip="Resim Yükle"
-            onClick={triggerImageUpload}
-          >
-            <FaImage />
-          </ToolButton>
-          <input
-            type="file"
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-            accept="image/*"
-            onChange={handleImageUpload}
-          />
-          <ToolButton data-tooltip="Ses ile Konuş">
-            <FaMicrophone />
-          </ToolButton>
-          <ToolButton data-tooltip="Özellikler">
-            <FaGift />
-          </ToolButton>
-        </ToolsContainer>
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          accept="image/*"
+          onChange={handleImageUpload}
+        />
         
         {remainingRequests <= 10 && (
           <LimitWarning>
