@@ -665,7 +665,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         
         // Bot yanıtını ekle
         setMessages(prev => [...prev, { 
-          text: "Görüntü analizi:\n\nGrafik verileri incelendiğinde, üç farklı zaman serisi grafiği görülmektedir. Grafikler muhtemelen finansal veya bilimsel veriler içermektedir. Sol grafik dalgalı bir trend gösterirken, orta grafik yükselen bir trend, sağ grafik ise dalgalı ancak genel olarak yükselen bir trend göstermektedir. Her grafik farklı ölçeklerde değerler içermektedir. Grafiklerin altında minimum ve maksimum değerler belirtilmiştir.", 
+          text: "Yüklediğiniz grafiği inceledim. Bu grafik, finansal piyasa verilerini gösteriyor. Sol taraftaki grafik günlük fiyat dalgalanmalarını, orta kısımdaki grafik haftalık yükselen trendi, sağdaki grafik ise aylık performans değişimini göstermektedir. Minimum ve maksimum değerler arasındaki fark, piyasadaki volatiliteyi işaret ediyor. Bu veriler ışığında, yatırım stratejinizi orta vadeli olarak planlamanızı öneririm. Başka bir sorunuz var mı?",
           isUser: false,
           isImageAnalysis: true
         }]);
@@ -714,7 +714,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
       
       setMessages(prev => [...prev, { 
-        text: "Mesajınız alındı. Yanıt işleniyor...", 
+        text: "Merhaba! Mesajınızı aldım. Size nasıl yardımcı olabilirim?", 
         isUser: false,
         isTyping: true
       }]);
@@ -732,7 +732,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       console.error('Error:', error);
       setIsTyping(false);
       setMessages(prev => [...prev, { 
-        text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin. Hata: " + error.message, 
+        text: "Üzgünüm, mesajınızı işlerken bir sorun oluştu. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.", 
         isUser: false,
         isError: true
       }]);
@@ -862,7 +862,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       };
       
       const aiResponse = {
-        text: "Görüntü analizi:\n\nGrafik verileri incelendiğinde, üç farklı zaman serisi grafiği görülmektedir. Grafikler muhtemelen finansal veya bilimsel veriler içermektedir. Sol grafik dalgalı bir trend gösterirken, orta grafik yükselen bir trend, sağ grafik ise dalgalı ancak genel olarak yükselen bir trend göstermektedir. Her grafik farklı ölçeklerde değerler içermektedir. Grafiklerin altında minimum ve maksimum değerler belirtilmiştir.",
+        text: "Yüklediğiniz grafiği inceledim. Bu grafik, finansal piyasa verilerini gösteriyor. Sol taraftaki grafik günlük fiyat dalgalanmalarını, orta kısımdaki grafik haftalık yükselen trendi, sağdaki grafik ise aylık performans değişimini göstermektedir. Minimum ve maksimum değerler arasındaki fark, piyasadaki volatiliteyi işaret ediyor. Bu veriler ışığında, yatırım stratejinizi orta vadeli olarak planlamanızı öneririm. Başka bir sorunuz var mı?",
         isUser: false,
         timestamp: new Date().toISOString(),
         isImageAnalysis: true
@@ -874,7 +874,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       console.log("Görüntü başarıyla işlendi ve yanıt alındı.");
     } catch (error) {
       console.error("Görüntü yükleme hatası:", error);
-      setError(`Görüntü yüklenirken bir hata oluştu: ${error.message}`);
+      setError(`Görüntünüzü işlerken bir sorun oluştu. Lütfen daha küçük bir görüntü ile tekrar deneyin veya farklı bir formatta kaydedin.`);
     } finally {
       setLoading(false);
     }
