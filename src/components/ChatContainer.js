@@ -709,7 +709,6 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     setIsTyping(true);
 
     try {
-      // CORS hatalarını önlemek için ayarlar
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
         method: 'POST',
         headers: {
@@ -720,29 +719,23 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           message: input,
           conversation_id: conversationId
         }),
-        mode: 'no-cors'
+        credentials: 'include'
       });
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      if (!response.ok) {
+        throw new Error(`Sunucu hatası: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
       setIsTyping(false);
       
-      // no-cors modunda response.ok ve response.json() çalışmayabilir
-      // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
-      
+      // Sunucudan gelen gerçek yanıtı kullan
       setMessages(prev => [...prev, { 
-        text: "Merhaba! Mesajınızı aldım. Size nasıl yardımcı olabilirim?", 
+        text: data.response || "Üzgünüm, şu anda yanıt veremiyorum.",
         isUser: false,
-        isTyping: true
+        isTyping: false
       }]);
-      
-      // Kısa bir gecikme sonra isTyping'i false yap
-      setTimeout(() => {
-        setMessages(prev => 
-          prev.map((msg, idx) => 
-            idx === prev.length - 1 ? { ...msg, isTyping: false } : msg
-          )
-        );
-      }, 1000);
       
     } catch (error) {
       console.error('Error:', error);
@@ -849,19 +842,16 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       console.log("Görüntü yükleniyor...");
       console.log("API URL:", process.env.REACT_APP_API_URL);
       
-      // Kullanıcının görüntü ile birlikte gönderdiği mesajı kontrol et
-      const userMessage = input.trim() ? input : "[Görüntü yüklendi]";
-      
       const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         },
-        mode: 'no-cors',
+        credentials: 'include',
         body: JSON.stringify({
           image: selectedImage,
-          message: userMessage,
+          message: input.trim(),
           conversation_context: messages.map(msg => ({
             text: msg.text,
             isUser: msg.isUser
@@ -869,41 +859,30 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         }),
       });
       
-      console.log("Sunucu yanıtı alındı. Durum:", response.status);
-      
-      // no-cors modunda response.ok ve response.json() çalışmayabilir
-      // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
+      if (!response.ok) {
+        throw new Error(`Sunucu hatası: ${response.status}`);
+      }
+
+      const data = await response.json();
       
       // Kullanıcı mesajını ekle
-      const userMessageObj = {
-        text: userMessage,
+      const userMessage = {
+        text: input.trim() || "[Görüntü yüklendi]",
         isUser: true,
         timestamp: new Date().toISOString(),
         isImage: true,
         imageData: selectedImage
       };
       
-      // Görüntüden metin çıkarma simülasyonu
-      // Gerçek uygulamada bu işlem sunucu tarafında yapılacak
-      let extractedText = "Görüntüden çıkarılan metin burada gösterilecek.";
-      let aiResponseText = "";
-      
-      if (input.trim()) {
-        // Kullanıcı bir mesaj girdiyse, bu mesaja göre yanıt ver
-        aiResponseText = `Gönderdiğiniz görüntüyü inceledim. Görüntüden şu metinleri çıkardım:\n\n"${extractedText}"\n\nSorunuz "${input}" ile ilgili olarak: Bu metinler, muhtemelen bir belge veya kitaptan alınmış olabilir. İçeriğe göre daha detaylı bir analiz yapabilirim.`;
-      } else {
-        // Kullanıcı sadece görüntü gönderdiyse, görüntüdeki metni analiz et
-        aiResponseText = `Gönderdiğiniz görüntüyü inceledim ve şu metinleri çıkardım:\n\n"${extractedText}"\n\nBu metinler bir belge veya kitaptan alınmış gibi görünüyor. Metinle ilgili daha spesifik bir sorunuz varsa, lütfen belirtin.`;
-      }
-      
+      // Sunucudan gelen analiz yanıtını ekle
       const aiResponse = {
-        text: aiResponseText,
+        text: data.response || "Görüntü analizi yapılamadı.",
         isUser: false,
         timestamp: new Date().toISOString(),
         isImageAnalysis: true
       };
       
-      setMessages(prevMessages => [...prevMessages, userMessageObj, aiResponse]);
+      setMessages(prevMessages => [...prevMessages, userMessage, aiResponse]);
       setSelectedImage(null);
       setInput('');
       
