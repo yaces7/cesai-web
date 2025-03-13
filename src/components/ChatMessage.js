@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from '@emotion/styled';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { FaUser, FaRobot, FaExclamationTriangle, FaCopy, FaCheck } from 'react-icons/fa';
 
 const MessageContainer = styled(motion.div)`
@@ -106,20 +106,39 @@ const MessageText = styled.div`
   }
 `;
 
-const TypewriterCursor = styled.span`
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  background-color: #E8DFD8;
-  margin-left: 2px;
-  animation: blink 1s step-end infinite;
+const FadeInText = styled(motion.div)`
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 1rem;
+  user-select: text;
   
-  @keyframes blink {
-    from, to {
-      opacity: 1;
+  a {
+    color: #4F9BFF;
+    text-decoration: none;
+    
+    &:hover {
+      text-decoration: underline;
     }
-    50% {
-      opacity: 0;
+  }
+  
+  code {
+    font-family: 'Fira Code', monospace;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.2rem;
+    font-size: 0.9rem;
+  }
+  
+  pre {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    
+    code {
+      background: transparent;
+      padding: 0;
     }
   }
 `;
@@ -332,13 +351,16 @@ const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysi
       );
     }
     
-    // Daktilo efekti için
-    if (isTyping) {
+    // Daktilo efekti yerine fade-in animasyonu kullanıyoruz
+    if (isTyping && !isUser) {
       return (
-        <MessageText>
+        <FadeInText
+          initial={{ opacity: 0.5 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+        >
           {text}
-          <TypewriterCursor />
-        </MessageText>
+        </FadeInText>
       );
     }
     

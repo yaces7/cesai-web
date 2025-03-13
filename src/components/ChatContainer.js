@@ -322,7 +322,7 @@ const AttachmentOption = styled.button`
   }
 `;
 
-// Daktilo efekti için yeni bileşen
+// Daktilo efekti yerine fade-in efekti kullanacağız
 const TypewriterText = styled.div`
   white-space: pre-wrap;
   line-height: 1.5;
@@ -417,28 +417,18 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     }
   };
 
-  // Daktilo efekti için yeni fonksiyon
-  const typewriterEffect = async (response, messageId) => {
-    const fullText = response;
-    let currentText = '';
+  // Daktilo efekti yerine fade-in efekti kullanacağız
+  const fadeInEffect = async (response, messageId) => {
+    // Mesajı direkt olarak ekle, animasyon ChatMessage bileşeninde yapılacak
+    setMessages(prev => 
+      prev.map((msg, idx) => 
+        idx === messageId ? { ...msg, text: response, isTyping: true } : msg
+      )
+    );
     
-    // Karakterleri tek tek ekle
-    for (let i = 0; i < fullText.length; i++) {
-      currentText += fullText[i];
-      
-      // Mesajı güncelle
-      setMessages(prev => 
-        prev.map((msg, idx) => 
-          idx === messageId ? { ...msg, text: currentText, isTyping: true } : msg
-        )
-      );
-      
-      // Rastgele gecikme (daha doğal görünmesi için)
-      const delay = Math.random() * 10 + 10; // 10-20ms arası
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
+    // Kısa bir gecikme sonra isTyping'i false yap
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Yazma tamamlandığında isTyping'i false yap
     setMessages(prev => 
       prev.map((msg, idx) => 
         idx === messageId ? { ...msg, isTyping: false } : msg
@@ -446,37 +436,23 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     );
   };
 
+  // Cümle cümle yanıt gösterme fonksiyonu
   const streamResponse = async (response) => {
-    // Cümlelere ayır
-    const sentences = response.match(/[^.!?]+[.!?]+/g) || [response];
+    // Tüm yanıtı tek seferde göster
+    setMessages(prev => [...prev, { 
+      text: response, 
+      isUser: false,
+      isTyping: true
+    }]);
     
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i].trim();
-      if (sentence) {
-        // Boş mesaj ekle
-        setMessages(prev => {
-          const newMessages = [...prev, { 
-            text: '', 
-            isUser: false, 
-            isTyping: true,
-            fullText: sentence
-          }];
-          return newMessages;
-        });
-        
-        // Kısa bir gecikme
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Daktilo efekti başlat
-        const messageId = messages.length;
-        typewriterEffect(sentence, messageId);
-        
-        // Cümleler arasında kısa bir bekleme
-        if (i < sentences.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-    }
+    // Kısa bir gecikme sonra isTyping'i false yap
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    setMessages(prev => 
+      prev.map((msg, idx) => 
+        idx === prev.length - 1 ? { ...msg, isTyping: false } : msg
+      )
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -606,15 +582,21 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           isMath: true
         }]);
       } else {
-        // For regular responses, use typewriter effect
-        const messageId = messages.length;
+        // Daktilo efekti yerine fade-in efekti kullan
         setMessages(prev => [...prev, { 
-          text: '', 
+          text: data.response, 
           isUser: false,
           isTyping: true
         }]);
         
-        typewriterEffect(data.response, messageId);
+        // Kısa bir gecikme sonra isTyping'i false yap
+        setTimeout(() => {
+          setMessages(prev => 
+            prev.map((msg, idx) => 
+              idx === prev.length - 1 ? { ...msg, isTyping: false } : msg
+            )
+          );
+        }, 1000);
       }
       
       // Update remaining requests
