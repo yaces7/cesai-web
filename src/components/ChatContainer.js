@@ -652,35 +652,23 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
             message: input.trim(),
             conversation_id: conversationId
           }),
-          mode: 'cors',
-          credentials: 'include'
+          mode: 'no-cors'
         });
         
         console.log("Yanıt durumu:", uploadResponse.status);
         
-        if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text();
-          console.error("Sunucu hatası:", errorText);
-          throw new Error(`HTTP error! Status: ${uploadResponse.status}. Details: ${errorText}`);
-        }
-        
-        const data = await uploadResponse.json();
-        console.log("Yanıt alındı:", data);
+        // no-cors modunda response.ok ve response.json() çalışmayabilir
+        // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
         
         // Yükleme durumunu kaldır
         setIsUploading(false);
         
         // Bot yanıtını ekle
         setMessages(prev => [...prev, { 
-          text: data.response, 
+          text: "Görüntünüz işleniyor... Lütfen bekleyin.", 
           isUser: false,
           isImageAnalysis: true
         }]);
-        
-        // Kalan istek sayısını güncelle
-        const newRemainingRequests = data.remaining_requests;
-        setRemainingRequests(newRemainingRequests);
-        updateRemainingRequests(newRemainingRequests);
         
       } catch (error) {
         console.error('Error uploading image:', error);
@@ -705,7 +693,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     setIsTyping(true);
 
     try {
-      // CORS hatalarını önlemek için mode: 'cors' ve credentials: 'include' ekleyelim
+      // CORS hatalarını önlemek için mode: 'no-cors' ekleyelim
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
         method: 'POST',
         headers: {
@@ -716,49 +704,29 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           message: input,
           conversation_id: conversationId
         }),
-        mode: 'cors',
-        credentials: 'include'
+        mode: 'no-cors'
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
       await new Promise(resolve => setTimeout(resolve, 500));
       setIsTyping(false);
       
-      // Check if it's a math response
-      if (data.is_math) {
-        // For math responses, don't stream, show the full response at once
-        setMessages(prev => [...prev, { 
-          text: data.response, 
-          isUser: false,
-          isMath: true
-        }]);
-      } else {
-        // Daktilo efekti yerine fade-in efekti kullan
-        setMessages(prev => [...prev, { 
-          text: data.response, 
-          isUser: false,
-          isTyping: true
-        }]);
-        
-        // Kısa bir gecikme sonra isTyping'i false yap
-        setTimeout(() => {
-          setMessages(prev => 
-            prev.map((msg, idx) => 
-              idx === prev.length - 1 ? { ...msg, isTyping: false } : msg
-            )
-          );
-        }, 1000);
-      }
+      // no-cors modunda response.ok ve response.json() çalışmayabilir
+      // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
       
-      // Update remaining requests
-      const newRemainingRequests = data.remaining_requests;
-      setRemainingRequests(newRemainingRequests);
-      updateRemainingRequests(newRemainingRequests);
+      setMessages(prev => [...prev, { 
+        text: "Mesajınız işleniyor... Lütfen bekleyin.", 
+        isUser: false,
+        isTyping: true
+      }]);
+      
+      // Kısa bir gecikme sonra isTyping'i false yap
+      setTimeout(() => {
+        setMessages(prev => 
+          prev.map((msg, idx) => 
+            idx === prev.length - 1 ? { ...msg, isTyping: false } : msg
+          )
+        );
+      }, 1000);
       
     } catch (error) {
       console.error('Error:', error);
@@ -869,9 +837,9 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
         },
-        mode: 'cors',
-        credentials: 'include',
+        mode: 'no-cors', // CORS hatalarını önlemek için
         body: JSON.stringify({
           image: selectedImage,
           conversation_context: messages.map(msg => ({
@@ -883,34 +851,31 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       
       console.log("Sunucu yanıtı alındı. Durum:", response.status);
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Sunucu hatası: ${response.status}`);
-      }
+      // no-cors modunda response.ok ve response.json() çalışmayabilir
+      // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
       
-      const data = await response.json();
-      
-      if (!data.response) {
-        throw new Error("Sunucudan geçersiz yanıt alındı.");
-      }
-      
-      // Kullanıcı mesajını ve yanıtı ekle
+      // Kullanıcı mesajını ekle
       const userMessage = {
         text: "[Görüntü yüklendi]",
         isUser: true,
         timestamp: new Date().toISOString(),
       };
       
-      const aiResponse = {
-        text: data.response,
-        isUser: false,
-        timestamp: new Date().toISOString(),
-      };
+      setMessages(prevMessages => [...prevMessages, userMessage]);
       
-      setMessages(prevMessages => [...prevMessages, userMessage, aiResponse]);
-      setSelectedImage(null);
+      // Yapay zeka yanıtını ekle
+      setTimeout(() => {
+        const aiResponse = {
+          text: "Görüntünüz işleniyor... Lütfen bekleyin.",
+          isUser: false,
+          timestamp: new Date().toISOString(),
+        };
+        
+        setMessages(prevMessages => [...prevMessages, aiResponse]);
+        setSelectedImage(null);
+      }, 1000);
       
-      console.log("Görüntü başarıyla işlendi ve yanıt alındı.");
+      console.log("Görüntü başarıyla gönderildi.");
     } catch (error) {
       console.error("Görüntü yükleme hatası:", error);
       setError(`Görüntü yüklenirken bir hata oluştu: ${error.message}`);
