@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
 import ChatMessage from './ChatMessage';
-import { FaPaperPlane, FaImage, FaGift, FaGlobe, FaMicrophone, FaBars } from 'react-icons/fa';
+import { FaPaperPlane, FaImage, FaGift, FaMicrophone, FaBars, FaArrowDown } from 'react-icons/fa';
 
 const Container = styled.div`
   width: 100%;
@@ -74,6 +74,7 @@ const MessagesContainer = styled.div`
   margin-top: 60px;
   margin-bottom: 180px;
   height: calc(100vh - 240px);
+  scroll-behavior: smooth;
   
   &::-webkit-scrollbar {
     width: 8px;
@@ -212,13 +213,37 @@ const LimitWarning = styled.div`
   border-radius: 0.5rem;
 `;
 
+const ScrollToBottomButton = styled(motion.button)`
+  position: fixed;
+  bottom: 180px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(79, 155, 255, 0.8);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  
+  &:hover {
+    background: rgba(79, 155, 255, 1);
+  }
+`;
+
 const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [remainingRequests, setRemainingRequests] = useState(100);
   const [isUploading, setIsUploading] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -243,6 +268,29 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Check scroll position to show/hide scroll button
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!messagesContainerRef.current) return;
+      
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      // Show button when scrolled up more than 200px from bottom
+      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
+      setShowScrollButton(isScrolledUp);
+    };
+    
+    const messagesContainer = messagesContainerRef.current;
+    if (messagesContainer) {
+      messagesContainer.addEventListener('scroll', handleScroll);
+    }
+    
+    return () => {
+      if (messagesContainer) {
+        messagesContainer.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
 
   const adjustTextareaHeight = () => {
     const textarea = textareaRef.current;
@@ -450,13 +498,11 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           </AnimatedTitle>
         </HeaderLeft>
         <HeaderRight>
-          <ToolButton data-tooltip="Dil Seçimi">
-            <FaGlobe />
-          </ToolButton>
+          {/* Dil değiştirme düğmesi kaldırıldı */}
         </HeaderRight>
       </Header>
 
-      <MessagesContainer ref={messagesEndRef}>
+      <MessagesContainer ref={messagesContainerRef}>
         {messages.map((message, index) => (
           <ChatMessage 
             key={index}
@@ -491,7 +537,24 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
             Görüntü yükleniyor ve analiz ediliyor...
           </TypingIndicator>
         )}
+        
+        {/* Görünmez referans noktası */}
+        <div ref={messagesEndRef} />
       </MessagesContainer>
+
+      {/* Aşağı kaydırma düğmesi */}
+      {showScrollButton && (
+        <ScrollToBottomButton
+          onClick={scrollToBottom}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <FaArrowDown />
+        </ScrollToBottomButton>
+      )}
 
       <InputSection>
         <InputContainer onSubmit={handleSubmit}>

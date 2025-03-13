@@ -56,6 +56,19 @@ const MessageContent = styled.div`
   }
 `;
 
+const MessageHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+`;
+
+const SenderName = styled.div`
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: ${props => props.isUser ? '#4F9BFF' : '#2ED573'};
+`;
+
 const MessageText = styled.div`
   white-space: pre-wrap;
   line-height: 1.5;
@@ -318,7 +331,7 @@ const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysi
       </Avatar>
       <MessageContent>
         <MessageHeader>
-          <SenderName>{isUser ? 'Sen' : 'CesAI'}</SenderName>
+          <SenderName isUser={isUser}>{isUser ? 'Sen' : 'CesAI'}</SenderName>
           {!isUser && !isImage && (
             <CopyButton onClick={copyToClipboard}>
               {copied ? <FaCheck /> : <FaCopy />}
