@@ -513,6 +513,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       setIsUploading(true);
       
       try {
+        // CORS hatalarını önlemek için mode: 'cors' ve credentials: 'include' ekleyelim
         const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
           method: 'POST',
           headers: {
@@ -523,8 +524,14 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
             image: selectedImage,
             message: input.trim(),
             conversation_id: conversationId
-          })
+          }),
+          mode: 'cors',
+          credentials: 'include'
         });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
         
         const data = await response.json();
         
@@ -547,7 +554,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         console.error('Error uploading image:', error);
         setIsUploading(false);
         setMessages(prev => [...prev, { 
-          text: "Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin.", 
+          text: "Üzgünüm, görüntü yüklenirken bir hata oluştu. Lütfen tekrar deneyin. Hata: " + error.message, 
           isUser: false,
           isError: true
         }]);
@@ -566,6 +573,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     setIsTyping(true);
 
     try {
+      // CORS hatalarını önlemek için mode: 'cors' ve credentials: 'include' ekleyelim
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
         method: 'POST',
         headers: {
@@ -575,8 +583,14 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         body: JSON.stringify({ 
           message: input,
           conversation_id: conversationId
-        })
+        }),
+        mode: 'cors',
+        credentials: 'include'
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
 
       const data = await response.json();
       
@@ -612,7 +626,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
       console.error('Error:', error);
       setIsTyping(false);
       setMessages(prev => [...prev, { 
-        text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.", 
+        text: "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin. Hata: " + error.message, 
         isUser: false,
         isError: true
       }]);
@@ -651,16 +665,39 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     const reader = new FileReader();
     
     reader.onload = (event) => {
-      const base64Image = event.target.result;
-      setSelectedImage(base64Image);
-      setShowAttachOptions(false);
+      try {
+        const base64Image = event.target.result;
+        
+        // Base64 formatını kontrol et
+        if (!base64Image || typeof base64Image !== 'string' || !base64Image.startsWith('data:image/')) {
+          throw new Error('Geçersiz görüntü formatı');
+        }
+        
+        // Görüntü boyutunu kontrol et (base64 olarak)
+        if (base64Image.length > 7 * 1024 * 1024) { // ~7MB (base64 daha büyük olur)
+          throw new Error('Görüntü boyutu çok büyük');
+        }
+        
+        setSelectedImage(base64Image);
+        setShowAttachOptions(false);
+      } catch (error) {
+        console.error('Görüntü yükleme hatası:', error);
+        alert(`Görüntü yüklenirken bir hata oluştu: ${error.message}`);
+      }
     };
     
-    reader.onerror = () => {
+    reader.onerror = (error) => {
+      console.error('Dosya okuma hatası:', error);
       alert('Dosya okuma hatası. Lütfen tekrar deneyin.');
     };
     
-    reader.readAsDataURL(file);
+    // Hata yakalama ile dosyayı oku
+    try {
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Dosya okuma hatası:', error);
+      alert(`Dosya okuma hatası: ${error.message}`);
+    }
     
     // Dosya seçiciyi sıfırla (aynı dosyayı tekrar seçebilmek için)
     e.target.value = null;
