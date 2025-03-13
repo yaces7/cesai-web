@@ -196,21 +196,90 @@ const UploadedImage = styled.img`
 
 const AnalysisContent = styled.div`
   margin-top: 8px;
-  background-color: #f0f7ff;
-  padding: 12px;
+  background-color: rgba(30, 41, 59, 0.9);
+  padding: 16px;
   border-radius: 8px;
-  border-left: 4px solid #3498db;
+  border-left: 4px solid #4F9BFF;
+  color: #E8DFD8;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100px;
+    height: 100px;
+    background: radial-gradient(circle at top right, rgba(79, 155, 255, 0.2), transparent 70%);
+    z-index: 0;
+  }
 `;
 
 const AnalysisTitle = styled.div`
   font-weight: bold;
-  margin-bottom: 8px;
-  color: #3498db;
+  margin-bottom: 12px;
+  color: #4F9BFF;
+  font-size: 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 8px;
+  display: flex;
+  align-items: center;
+  
+  &::before {
+    content: '📊';
+    margin-right: 8px;
+    font-size: 1.2rem;
+  }
 `;
 
 const AnalysisText = styled.div`
   white-space: pre-wrap;
-  line-height: 1.5;
+  line-height: 1.6;
+  position: relative;
+  z-index: 1;
+  
+  /* Sayısal verileri vurgula */
+  .number {
+    color: #F39C12;
+    font-weight: 500;
+  }
+  
+  /* Grafik analizi bölümlerini vurgula */
+  .section-title {
+    color: #2ECC71;
+    font-weight: bold;
+    margin-top: 10px;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+  }
+  
+  /* Önemli bilgileri vurgula */
+  .highlight {
+    background-color: rgba(46, 204, 113, 0.2);
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+  
+  /* Çıkarılan metin kutusu */
+  .extracted-text {
+    background-color: rgba(52, 152, 219, 0.1);
+    padding: 10px;
+    border-radius: 5px;
+    margin: 10px 0;
+    border-left: 3px solid #3498db;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+  }
+  
+  /* Satır sonlarını düzgün göster */
+  br {
+    display: block;
+    content: "";
+    margin-top: 8px;
+  }
 `;
 
 const MathProblem = styled.div`
@@ -313,6 +382,55 @@ const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysi
     );
   };
 
+  // Görüntü analizi içeriğini formatlayan yardımcı fonksiyon
+  const formatAnalysisText = (text) => {
+    // Sayısal değerleri vurgula
+    let formattedText = text.replace(/(\d+(\.\d+)?%?)/g, '<span class="number">$1</span>');
+    
+    // Bölüm başlıklarını vurgula ve emoji ekle
+    const sectionEmojis = {
+      'Görüntü analizi': '🔍',
+      'Grafik analizi': '📈',
+      'Sonuç': '✅',
+      'Metin analizi': '📝',
+      'Görüntüden çıkarılan metin': '📄',
+      'Tespit edilen matematiksel ifadeler': '🔢',
+      'Bu görüntü bir': '🖼️',
+      'Sorunuz': '❓',
+      'Görüntü özellikleri': '🔎'
+    };
+    
+    Object.entries(sectionEmojis).forEach(([section, emoji]) => {
+      const regex = new RegExp(`(${section}):`, 'g');
+      formattedText = formattedText.replace(regex, `<div class="section-title">${emoji} $1:</div>`);
+    });
+    
+    // Önemli bilgileri vurgula
+    formattedText = formattedText.replace(/(yükselen trend|düşen trend|dalgalı trend|minimum|maksimum|ortalama|medyan|volatilite|fiyat dalgalanmaları|performans değişimi)/gi, 
+      '<span class="highlight">$1</span>');
+    
+    // Görüntü türlerini vurgula
+    formattedText = formattedText.replace(/(fotoğraf|belge|çizim veya grafik|matematiksel formül)/g, 
+      '<span style="color: #3498db; font-weight: bold;">$1</span>');
+    
+    // Madde işaretlerini vurgula
+    formattedText = formattedText.replace(/^(- .+)$/gm, 
+      '<span style="color: #e74c3c;">$1</span>');
+    
+    // Paragrafları ayır
+    formattedText = formattedText.replace(/\n\n/g, '<br><br>');
+    
+    // Çıkarılan metni özel bir kutu içinde göster
+    if (formattedText.includes('Görüntüden çıkarılan metin')) {
+      formattedText = formattedText.replace(
+        /Görüntüden çıkarılan metin:(.+?)(\n\n|$)/s, 
+        '<div class="section-title">📄 Görüntüden çıkarılan metin:</div><div class="extracted-text">$1</div>'
+      );
+    }
+    
+    return formattedText;
+  };
+
   const renderContent = () => {
     if (isImage && imageData) {
       return (
@@ -326,7 +444,7 @@ const ChatMessage = ({ text, isUser, isError, isImage, imageData, isImageAnalysi
       return (
         <AnalysisContent>
           <AnalysisTitle>Görüntü Analizi</AnalysisTitle>
-          <AnalysisText>{text}</AnalysisText>
+          <AnalysisText dangerouslySetInnerHTML={{ __html: formatAnalysisText(text) }} />
         </AnalysisContent>
       );
     }
