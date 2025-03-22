@@ -3,6 +3,7 @@ import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
 import ChatMessage from './ChatMessage';
 import { FaPaperPlane, FaImage, FaPlus, FaMicrophone, FaBars, FaArrowDown, FaTimes, FaExclamationTriangle, FaUpload, FaPaperclip, FaSpinner } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 
 const Container = styled.div`
   width: 100%;
@@ -425,6 +426,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
   const messagesContainerRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const navigate = useNavigate();
 
   // Load conversation history when conversationId changes
   useEffect(() => {
@@ -605,146 +607,155 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!input.trim() && !selectedImage) return;
-
-    // Check if user has reached the request limit
-    if (remainingRequests <= 0) {
-      setMessages(prev => [...prev, { 
-        text: "Günlük istek limitinize ulaştınız. Yarın tekrar deneyin.", 
-        isUser: false,
-        isError: true
-      }]);
+    
+    if (!input.trim() && !selectedImage) {
       return;
     }
 
-    // Eğer seçili bir görüntü varsa
-    if (selectedImage) {
-      // Kullanıcı mesajını ekle
-      setMessages(prev => [...prev, { 
-        text: input.trim() ? input : '[Görüntü yüklendi]', 
-        isUser: true,
-        isImage: true,
-        imageData: selectedImage
-      }]);
-      
-      setInput('');
-      setSelectedImage(null);
-      
-      if (textareaRef.current) {
-        textareaRef.current.style.height = '52px';
-      }
-
-      setIsUploading(true);
-      
-      try {
-        console.log("Fotoğraf yükleniyor...");
-        console.log("API URL:", `${process.env.REACT_APP_API_URL}/upload-image`);
-        
-        // Kullanıcının görüntü ile birlikte gönderdiği mesajı kontrol et
-        const userMessage = input.trim() ? input : "[Görüntü yüklendi]";
-        
-        // CORS hatalarını önlemek için ayarlar
-        const uploadResponse = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          },
-          body: JSON.stringify({ 
-            image: selectedImage,
-            message: userMessage,
-            conversation_id: conversationId
-          }),
-          mode: 'no-cors'
-        });
-        
-        console.log("Yanıt durumu:", uploadResponse.status);
-        
-        // no-cors modunda response.ok ve response.json() çalışmayabilir
-        // Bu durumda başarılı olduğunu varsayalım ve kullanıcıya bilgi verelim
-        
-        // Yükleme durumunu kaldır
-        setIsUploading(false);
-        
-        // Görüntüden metin çıkarma simülasyonu
-        // Gerçek uygulamada bu işlem sunucu tarafında yapılacak
-        let extractedText = "Görüntüden çıkarılan metin burada gösterilecek.";
-        let aiResponseText = "";
-        
-        if (input.trim()) {
-          // Kullanıcı bir mesaj girdiyse, bu mesaja göre yanıt ver
-          aiResponseText = `Gönderdiğiniz görüntüyü inceledim. Görüntüden şu metinleri çıkardım:\n\n"${extractedText}"\n\nSorunuz "${input}" ile ilgili olarak: Bu metinler, muhtemelen bir belge veya kitaptan alınmış olabilir. İçeriğe göre daha detaylı bir analiz yapabilirim.`;
-        } else {
-          // Kullanıcı sadece görüntü gönderdiyse, görüntüdeki metni analiz et
-          aiResponseText = `Gönderdiğiniz görüntüyü inceledim ve şu metinleri çıkardım:\n\n"${extractedText}"\n\nBu metinler bir belge veya kitaptan alınmış gibi görünüyor. Metinle ilgili daha spesifik bir sorunuz varsa, lütfen belirtin.`;
-        }
-        
-        // Bot yanıtını ekle
-        setMessages(prev => [...prev, { 
-          text: aiResponseText, 
-          isUser: false,
-          isImageAnalysis: true
-        }]);
-        
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        setIsUploading(false);
-        setMessages(prev => [...prev, { 
-          text: `Üzgünüm, görüntünüzü işlerken bir sorun oluştu. Lütfen daha küçük bir görüntü ile tekrar deneyin veya farklı bir formatta kaydedin.`, 
-          isUser: false,
-          isError: true
-        }]);
-      }
-      
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
       return;
-    }
-
-    // Normal metin mesajı gönderme
-    setMessages(prev => [...prev, { text: input, isUser: true }]);
-    setInput('');
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '52px';
     }
 
     setIsTyping(true);
+    setShowScrollButton(false);
+    
+    const newMessageId = Date.now().toString();
+    const userMessage = {
+      id: newMessageId,
+      text: input.trim(),
+      isUser: true,
+      timestamp: new Date().toISOString()
+    };
 
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    adjustTextareaHeight();
+    
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/chat`, {
+      if (selectedImage) {
+        await handleImageUpload();
+        return;
+      }
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
-          message: input,
-          conversation_id: conversationId
-        }),
-        credentials: 'include'
+        body: JSON.stringify({
+          message: input.trim(),
+          conversation_id: conversationId,
+          model_preferences: {
+            temperature: 0.7,
+            max_length: 2000
+          }
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`Sunucu hatası: ${response.status}`);
+        if (response.status === 429) {
+          const data = await response.json();
+          setError(`API kullanım limitine ulaştınız. ${data.retry_after} saniye sonra tekrar deneyin.`);
+          return;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
       
-      setIsTyping(false);
-      
-      // Sunucudan gelen gerçek yanıtı kullan
-      setMessages(prev => [...prev, { 
-        text: data.response || "Üzgünüm, şu anda yanıt veremiyorum.",
+      if (data.remaining_requests !== undefined) {
+        updateRemainingRequests(data.remaining_requests);
+      }
+
+      const botMessage = {
+        id: Date.now().toString(),
+        text: data.main_response || data.response,
         isUser: false,
-        isTyping: false
-      }]);
+        timestamp: new Date().toISOString(),
+        isCode: data.is_code,
+        language: data.language,
+        isMath: data.is_math
+      };
+
+      await fadeInEffect(botMessage, newMessageId);
       
     } catch (error) {
       console.error('Error:', error);
+      setError('Bir hata oluştu. Lütfen tekrar deneyin.');
+    } finally {
       setIsTyping(false);
-      setMessages(prev => [...prev, { 
-        text: "Üzgünüm, mesajınızı işlerken bir sorun oluştu. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.", 
-        isUser: false,
-        isError: true
-      }]);
+      setSelectedImage(null);
+      scrollToBottom();
+    }
+  };
+
+  const handleImageUpload = async () => {
+    if (!selectedImage) return;
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Image = reader.result.split(',')[1];
+        
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/image`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            image: base64Image,
+            message: input.trim(),
+            conversation_context: messages.slice(-5).map(msg => ({
+              text: msg.text,
+              isUser: msg.isUser
+            })),
+            model_preferences: {
+              analysis_type: 'detailed',
+              extract_text: true,
+              detect_objects: true
+            }
+          })
+        });
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            const data = await response.json();
+            setError(`API kullanım limitine ulaştınız. ${data.retry_after} saniye sonra tekrar deneyin.`);
+            return;
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        const botMessage = {
+          id: Date.now().toString(),
+          text: data.response,
+          isUser: false,
+          timestamp: new Date().toISOString(),
+          isImageAnalysis: true
+        };
+
+        setMessages(prev => [...prev, botMessage]);
+        
+      };
+      reader.readAsDataURL(selectedImage);
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Görüntü işlenirken bir hata oluştu. Lütfen tekrar deneyin.');
+    } finally {
+      setSelectedImage(null);
+      scrollToBottom();
     }
   };
 
@@ -829,76 +840,6 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
     }
   };
 
-  const handleImageUpload = async () => {
-    if (!selectedImage) {
-      setError("Lütfen bir görüntü seçin.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      console.log("Görüntü yükleniyor...");
-      console.log("API URL:", process.env.REACT_APP_API_URL);
-      
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/upload-image`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          image: selectedImage,
-          message: input.trim(),
-          conversation_context: messages.map(msg => ({
-            text: msg.text,
-            isUser: msg.isUser
-          }))
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Sunucu hatası: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      // Kullanıcı mesajını ekle
-      const userMessage = {
-        text: input.trim() || "[Görüntü yüklendi]",
-        isUser: true,
-        timestamp: new Date().toISOString(),
-        isImage: true,
-        imageData: selectedImage
-      };
-      
-      // Sunucudan gelen analiz yanıtını ekle
-      const aiResponse = {
-        text: data.response || "Görüntü analizi yapılamadı.",
-        isUser: false,
-        timestamp: new Date().toISOString(),
-        isImageAnalysis: true
-      };
-      
-      setMessages(prevMessages => [...prevMessages, userMessage, aiResponse]);
-      setSelectedImage(null);
-      setInput('');
-      
-      if (textareaRef.current) {
-        textareaRef.current.style.height = '52px';
-      }
-      
-      console.log("Görüntü başarıyla işlendi ve yanıt alındı.");
-    } catch (error) {
-      console.error("Görüntü yükleme hatası:", error);
-      setError(`Görüntünüzü işlerken bir sorun oluştu. Lütfen daha küçük bir görüntü ile tekrar deneyin veya farklı bir formatta kaydedin.`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const triggerImageUpload = () => {
     fileInputRef.current.click();
   };
@@ -930,10 +871,10 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           {/* Dil değiştirme düğmesi kaldırıldı */}
         </HeaderRight>
       </Header>
-
+      
       <MessagesContainer ref={messagesContainerRef}>
         {messages.map((message, index) => (
-          <ChatMessage 
+          <ChatMessage
             key={index}
             text={message.text}
             isUser={message.isUser}
@@ -1007,7 +948,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
           </ImagePreviewActions>
         </ImagePreviewContainer>
       )}
-
+      
       <InputSection>
         <InputContainer onSubmit={handleSubmit}>
           <AttachButton 
