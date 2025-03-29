@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import styled from 'styled-components';
@@ -180,39 +180,55 @@ const Divider = styled.div`
   }
 `;
 
-const LoginPage = ({ onLogin }) => {
+const LoginPage = () => {
+  const navigate = useNavigate();
+  const { login, signInWithGoogle } = useFirebase();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const { login, signInWithGoogle } = useFirebase();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
+    setError('');
 
     try {
       const user = await login(email, password);
-      onLogin(user, await user.getIdToken());
-      navigate('/');
+      if (!user.emailVerified) {
+        setError('Lütfen email adresinizi doğrulayın. Spam klasörünü kontrol etmeyi unutmayın.');
+        return;
+      }
+      navigate('/chat');
     } catch (error) {
-      setError(error.message);
+      let errorMessage = 'Giriş başarısız.';
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'Bu e-posta adresiyle kayıtlı bir kullanıcı bulunamadı.';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Hatalı şifre girdiniz.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Geçersiz e-posta adresi.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Çok fazla başarısız giriş denemesi. Lütfen daha sonra tekrar deneyin.';
+          break;
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    setError('');
     setLoading(true);
-
+    setError('');
     try {
-      const user = await signInWithGoogle();
-      onLogin(user, await user.getIdToken());
-      navigate('/');
+      await signInWithGoogle();
+      navigate('/chat');
     } catch (error) {
       setError(error.message);
     } finally {
@@ -272,8 +288,7 @@ const LoginPage = ({ onLogin }) => {
               placeholder="E-posta"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              whileFocus={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              required
             />
           </InputGroup>
 
@@ -283,16 +298,25 @@ const LoginPage = ({ onLogin }) => {
               placeholder="Şifre"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              whileFocus={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              required
             />
             <PasswordToggle
               type="button"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? <FaEyeSlash size={20} /> : <FaEye size={20} />}
+              {showPassword ? "Gizle" : "Göster"}
             </PasswordToggle>
           </InputGroup>
+
+          {error && (
+            <ErrorMessage
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {error}
+            </ErrorMessage>
+          )}
 
           <Button
             type="submit"
@@ -323,16 +347,6 @@ const LoginPage = ({ onLogin }) => {
           <FaGoogle />
           Google ile Giriş Yap
         </GoogleButton>
-
-        {error && (
-          <ErrorMessage
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            {error}
-          </ErrorMessage>
-        )}
 
         <RegisterLink>
           Hesabınız yok mu?{' '}
