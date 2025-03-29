@@ -144,7 +144,16 @@ const FloatingIcon = styled(motion.div)`
 
 const GoogleButton = styled(Button)`
   background: linear-gradient(45deg, #4285f4, #34a853);
-  margin-top: 10px;
+  margin: 10px auto;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  
+  svg {
+    margin-right: 8px;
+  }
 `;
 
 const Divider = styled.div`
@@ -153,6 +162,7 @@ const Divider = styled.div`
   text-align: center;
   margin: 20px 0;
   color: rgba(255, 255, 255, 0.5);
+  width: 100%;
   
   &::before,
   &::after {
