@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import styled from '@emotion/styled';
 import ChatContainer from './components/ChatContainer';
 import Sidebar from './components/Sidebar';
-import Login from './components/Login';
-import Register from './components/Register';
+import Login from './pages/login';
+import Register from './pages/register';
+import { FirebaseProvider } from './contexts/FirebaseContext';
 import './App.css';
 
 const AppContainer = styled.div`
@@ -103,62 +104,64 @@ function App() {
   };
 
   return (
-    <Router>
-      <AppContainer>
-        {isAuthenticated && (
-          <Sidebar 
-            user={user}
-            conversations={conversations}
-            currentConversation={currentConversation}
-            setCurrentConversation={setCurrentConversation}
-            createNewConversation={createNewConversation}
-            onLogout={handleLogout}
-            isMobileOpen={isMobile ? isMobileSidebarOpen : true}
-            setIsMobileOpen={setIsMobileSidebarOpen}
-            remainingRequests={remainingRequests}
-            isMobile={isMobile}
-          />
-        )}
-        <MainContent>
-          <Routes>
-            <Route 
-              path="/" 
-              element={
-                isAuthenticated ? (
-                  <ChatContainer 
-                    conversationId={currentConversation}
-                    toggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-                    updateRemainingRequests={updateRemainingRequests}
-                  />
-                ) : (
-                  <Navigate to="/login" />
-                )
-              } 
+    <FirebaseProvider>
+      <Router>
+        <AppContainer>
+          {isAuthenticated && (
+            <Sidebar 
+              user={user}
+              conversations={conversations}
+              currentConversation={currentConversation}
+              setCurrentConversation={setCurrentConversation}
+              createNewConversation={createNewConversation}
+              onLogout={handleLogout}
+              isMobileOpen={isMobile ? isMobileSidebarOpen : true}
+              setIsMobileOpen={setIsMobileSidebarOpen}
+              remainingRequests={remainingRequests}
+              isMobile={isMobile}
             />
-            <Route 
-              path="/login" 
-              element={
-                !isAuthenticated ? (
-                  <Login onLogin={handleLogin} />
-                ) : (
-                  <Navigate to="/" />
-                )
-              } 
-            />
-            <Route 
-              path="/register" 
-              element={
-                !isAuthenticated ? (
-                  <Register />
-                ) : (
-                  <Navigate to="/" />
-                )
-              } 
-            />
-          </Routes>
-        </MainContent>
-      </AppContainer>
-    </Router>
+          )}
+          <MainContent>
+            <Routes>
+              <Route 
+                path="/" 
+                element={
+                  isAuthenticated ? (
+                    <ChatContainer 
+                      conversationId={currentConversation}
+                      toggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+                      updateRemainingRequests={updateRemainingRequests}
+                    />
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                } 
+              />
+              <Route 
+                path="/login" 
+                element={
+                  !isAuthenticated ? (
+                    <Login onLogin={handleLogin} />
+                  ) : (
+                    <Navigate to="/" />
+                  )
+                } 
+              />
+              <Route 
+                path="/register" 
+                element={
+                  !isAuthenticated ? (
+                    <Register />
+                  ) : (
+                    <Navigate to="/" />
+                  )
+                } 
+              />
+            </Routes>
+          </MainContent>
+        </AppContainer>
+      </Router>
+    </FirebaseProvider>
   );
 }
 

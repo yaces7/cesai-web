@@ -381,15 +381,17 @@ const ChatMessage = ({ message, isTyping }) => {
     isMath,
     isImageAnalysis,
     imageData
-  } = message;
+  } = message || {};
 
   const [copied, setCopied] = useState(false);
   const [formattedText, setFormattedText] = useState('');
   const messageRef = useRef(null);
   
   useEffect(() => {
-    // Format the message text
-    setFormattedText(formatText(text));
+    // Format the message text if it exists
+    if (text) {
+      setFormattedText(formatText(text));
+    }
   }, [text]);
   
   // Function to convert URLs to clickable links
@@ -539,7 +541,7 @@ const ChatMessage = ({ message, isTyping }) => {
           {!isUser && !isImageAnalysis && !isTyping && (
             <CopyButton onClick={copyToClipboard}>
               {copied ? <FaCheck /> : <FaCopy />}
-            </CopyButton>
+          </CopyButton>
           )}
         </MessageHeader>
         {imageData && (

@@ -876,12 +876,7 @@ const ChatContainer = ({ conversationId, toggleSidebar, updateRemainingRequests 
         {messages.map((message, index) => (
           <ChatMessage
             key={index}
-            text={message.text}
-            isUser={message.isUser}
-            isError={message.isError}
-            isImage={message.isImage}
-            imageData={message.imageData}
-            isImageAnalysis={message.isImageAnalysis}
+            message={message}
             isTyping={message.isTyping}
           />
         ))}
