@@ -28,7 +28,8 @@ import {
   enableIndexedDbPersistence,
   initializeFirestore,
   persistentLocalCache,
-  getFirestore as getExistingFirestore
+  getFirestore as getExistingFirestore,
+  addDoc
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase/config';
 
@@ -367,12 +368,14 @@ export const FirebaseProvider = ({ children }) => {
         }],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        archived: false
+        archived: false,
+        pinned: false
       };
       
-      const docRef = await setDoc(doc(conversationsCol), newConversation);
+      const docRef = await addDoc(conversationsCol, newConversation);
       return docRef.id;
     } catch (error) {
+      console.error("Sohbet oluşturma hatası:", error);
       throw error;
     }
   };
