@@ -25,28 +25,25 @@ import {
   serverTimestamp,
   increment,
   runTransaction,
-  enableIndexedDbPersistence
+  enableIndexedDbPersistence,
+  initializeFirestore,
+  persistentLocalCache
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase/config';
 
 // Firebase yapılandırmasını başlat
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+
+// Modern cache ile Firestore başlatma
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({})
+});
+
 const googleProvider = new GoogleAuthProvider();
 
-// Çevrimdışı veri desteğini etkinleştir
-try {
-  enableIndexedDbPersistence(db)
-    .then(() => {
-      console.log("Çevrimdışı depolama etkinleştirildi");
-    })
-    .catch((err) => {
-      console.error("Çevrimdışı depolama hatası:", err);
-    });
-} catch (error) {
-  console.warn("IndexedDB persistence etkinleştirilemedi:", error);
-}
+// Çevrimdışı veri desteği başarıyla etkinleştirildi bildirimi
+console.log("Çevrimdışı depolama persistentLocalCache ile etkinleştirildi");
 
 // Context oluştur
 const FirebaseContext = createContext(null);
