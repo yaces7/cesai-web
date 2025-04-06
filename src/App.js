@@ -11,7 +11,7 @@ import './App.css';
 
 // Giriş gerektiren sayfalar için özel bir Route bileşeni
 const PrivateRoute = ({ children }) => {
-  const { user, loading } = useFirebase();
+  const { user, loading, firebaseError } = useFirebase();
   
   // Kimlik doğrulama yükleniyorsa, yükleme göster
   if (loading) {
@@ -25,6 +25,64 @@ const PrivateRoute = ({ children }) => {
         color: 'var(--text-color)' 
       }}>
         <h2>Yükleniyor...</h2>
+      </div>
+    );
+  }
+  
+  // Firebase izin hatası kontrolü
+  if (firebaseError) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: 'var(--bg-color)',
+        color: '#ff5555',
+        padding: '2rem'
+      }}>
+        <h2>Firebase Erişim Hatası</h2>
+        <p>{firebaseError}</p>
+        <div style={{ marginTop: '2rem', color: 'var(--text-color)', maxWidth: '600px', textAlign: 'center' }}>
+          <h3>Yapmanız gerekenler:</h3>
+          <ol style={{ textAlign: 'left' }}>
+            <li>Firebase Konsoluna gidin (https://console.firebase.google.com/)</li>
+            <li>Projenizi seçin</li>
+            <li>Firestore Database &gt; Rules bölümünde güvenlik kurallarını düzenleyin</li>
+            <li>Aşağıdaki kuralları yapıştırın:</li>
+          </ol>
+          <pre style={{ 
+            background: 'rgba(0,0,0,0.1)', 
+            padding: '1rem', 
+            borderRadius: '8px',
+            overflow: 'auto', 
+            textAlign: 'left',
+            margin: '1rem 0'
+          }}>
+            {`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    match /conversations/{conversationId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+    
+    match /apiLimits/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}`}
+          </pre>
+          <p>Kuralları kaydedip, sayfayı yeniledikten sonra uygulama çalışacaktır.</p>
+        </div>
       </div>
     );
   }

@@ -24,7 +24,8 @@ import {
   onSnapshot,
   serverTimestamp,
   increment,
-  runTransaction 
+  runTransaction,
+  enableIndexedDbPersistence
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase/config';
 
@@ -33,6 +34,19 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// Çevrimdışı veri desteğini etkinleştir
+try {
+  enableIndexedDbPersistence(db)
+    .then(() => {
+      console.log("Çevrimdışı depolama etkinleştirildi");
+    })
+    .catch((err) => {
+      console.error("Çevrimdışı depolama hatası:", err);
+    });
+} catch (error) {
+  console.warn("IndexedDB persistence etkinleştirilemedi:", error);
+}
 
 // Context oluştur
 const FirebaseContext = createContext(null);
@@ -51,6 +65,7 @@ export const FirebaseProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState('dark'); // Varsayılan tema
+  const [firebaseError, setFirebaseError] = useState(null);
   
   // Kullanıcı oturum durumunu izle
   useEffect(() => {
@@ -104,6 +119,13 @@ export const FirebaseProvider = ({ children }) => {
           }
         } catch (error) {
           console.error('Kullanıcı verisi alınırken hata oluştu:', error);
+          
+          // Firebase yetkilendirme hatası kontrolü
+          if (error.code === 'permission-denied') {
+            setFirebaseError("Veritabanı izin hatası: Firebase güvenlik kurallarını kontrol edin.");
+            console.error("Firebase yetkilendirme hatası:", error.message);
+          }
+          
           setUser({
             uid: authUser.uid,
             email: authUser.email,
@@ -524,6 +546,7 @@ export const FirebaseProvider = ({ children }) => {
     theme,
     auth,
     db,
+    firebaseError,
     login,
     signInWithGoogle,
     register,
