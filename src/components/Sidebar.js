@@ -1,25 +1,24 @@
-import React from 'react';
-import styled from '@emotion/styled';
+import React, { useState, useEffect } from 'react';
+import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { FaPlus, FaSignOutAlt, FaUser, FaRobot, FaHistory, FaInfoCircle, FaCog, FaTimes, FaBars } from 'react-icons/fa';
-import { Link } from 'react-router-dom';
+import { FaPlus, FaSignOutAlt, FaUser, FaRobot, FaHistory, FaInfoCircle, FaCog, FaTimes, FaBars, FaUserCircle } from 'react-icons/fa';
+import { Link, useNavigate } from 'react-router-dom';
+import { useFirebase } from '../contexts/FirebaseContext';
 
 const SidebarContainer = styled(motion.div)`
-  width: 280px;
+  width: 260px;
   height: 100%;
   background: rgba(30, 13, 61, 0.9);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  position: relative;
+  position: fixed;
   z-index: 100;
+  top: 0;
+  left: 0;
   
   @media (max-width: 768px) {
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
   }
 `;
@@ -96,6 +95,7 @@ const ConversationList = styled.div`
   flex: 1;
   overflow-y: auto;
   padding: 0 8px;
+  max-height: calc(100vh - 350px);
   
   &::-webkit-scrollbar {
     width: 4px;
@@ -156,93 +156,6 @@ const UserInfo = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
-  
-  .user-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #4F9BFF, #9D4EDD);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-  }
-  
-  .user-name {
-    font-size: 14px;
-    font-weight: 500;
-  }
-  
-  .user-email {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
-  }
-`;
-
-const LogoutButton = styled.button`
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  
-  &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
-  }
-`;
-
-const UsageInfo = styled.div`
-  padding: 8px 16px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  text-align: center;
-  
-  .usage-count {
-    font-weight: 500;
-    color: ${props => props.count > 50 ? '#4F9BFF' : props.count > 20 ? '#FFB74D' : '#FF5252'};
-  }
-`;
-
-const CloseButton = styled.button`
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  
-  &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
-  }
-`;
-
-const MenuButton = styled.button`
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  
-  &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
-  }
 `;
 
 const UserAvatar = styled.div`
@@ -254,11 +167,22 @@ const UserAvatar = styled.div`
   align-items: center;
   justify-content: center;
   color: white;
+  overflow: hidden;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 `;
 
 const UserName = styled.div`
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
 `;
 
 const UserControls = styled.div`
@@ -303,20 +227,131 @@ const LoginButton = styled(Link)`
   }
 `;
 
-const Sidebar = ({ 
-  user, 
-  conversations, 
-  currentConversation, 
-  setCurrentConversation, 
-  createNewConversation, 
-  onLogout,
-  isMobileOpen,
-  setIsMobileOpen,
-  remainingRequests,
-  isMobile,
-  showSidebar,
-  setShowSidebar
-}) => {
+const UsageInfo = styled.div`
+  padding: 8px 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  
+  .usage-count {
+    font-weight: 500;
+    color: ${props => props.count > 50 ? '#4F9BFF' : props.count > 20 ? '#FFB74D' : '#FF5252'};
+  }
+`;
+
+const CloseButton = styled.button`
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+`;
+
+const MenuButton = styled.button`
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 99;
+  background: rgba(30, 13, 61, 0.8);
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  
+  &:hover {
+    background: rgba(30, 13, 61, 1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+`;
+
+const Sidebar = ({ showSidebar, setShowSidebar }) => {
+  const { user, logout, updateApiUsage } = useFirebase();
+  const [conversations, setConversations] = useState([]);
+  const [currentConversation, setCurrentConversation] = useState(null);
+  const [remainingRequests, setRemainingRequests] = useState(100);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const navigate = useNavigate();
+
+  // Ekran boyutunu izle
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Kullanıcı varsa sohbetleri getir
+  useEffect(() => {
+    if (user) {
+      fetchConversations();
+    } else {
+      setConversations([]);
+    }
+  }, [user]);
+
+  const fetchConversations = async () => {
+    try {
+      // Örnek sohbetler (gerçek API'den alınması gerekir)
+      setConversations([
+        { id: '1', title: 'Yeni Sohbet', createdAt: new Date().toISOString() }
+      ]);
+      setCurrentConversation('1');
+
+      // Kullanıcının API kullanım limitini kontrol et
+      if (user) {
+        try {
+          const usageLimit = user.usageLimit || 100;
+          setRemainingRequests(usageLimit);
+        } catch (error) {
+          console.error('API kullanımı kontrol edilirken hata oluştu:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Sohbetler alınırken hata oluştu:', error);
+    }
+  };
+
+  const createNewConversation = () => {
+    const newConversation = {
+      id: Date.now().toString(),
+      title: 'Yeni Sohbet',
+      createdAt: new Date().toISOString()
+    };
+    
+    setConversations([newConversation, ...conversations]);
+    setCurrentConversation(newConversation.id);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Çıkış yapılırken hata oluştu:', error);
+    }
+  };
+
   // Format date for display
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -333,7 +368,7 @@ const Sidebar = ({
     <>
       <SidebarContainer 
         initial={false}
-        animate={isMobileOpen ? "open" : "closed"}
+        animate={showSidebar ? "open" : "closed"}
         variants={isMobile ? variants : {}}
         transition={{ duration: 0.3 }}
         showSidebar={showSidebar}
@@ -371,8 +406,8 @@ const Sidebar = ({
                 active={conversation.id === currentConversation}
                 onClick={() => {
                   setCurrentConversation(conversation.id);
-                  if (window.innerWidth <= 768) {
-                    setIsMobileOpen(false);
+                  if (isMobile) {
+                    setShowSidebar(false);
                   }
                 }}
                 whileTap={{ scale: 0.98 }}
@@ -396,18 +431,18 @@ const Sidebar = ({
               <UserInfo>
                 <UserAvatar>
                   {user.photoURL ? (
-                    <img src={user.photoURL} alt="User" />
+                    <img src={user.photoURL} alt="Kullanıcı" />
                   ) : (
-                    <FaUser />
+                    <FaUserCircle />
                   )}
                 </UserAvatar>
-                <UserName>{user.name || user.displayName}</UserName>
+                <UserName>{user.name || user.displayName || 'Kullanıcı'}</UserName>
               </UserInfo>
               <UserControls>
                 <IconButton as={Link} to="/settings" title="Ayarlar">
                   <FaCog />
                 </IconButton>
-                <IconButton onClick={onLogout} title="Çıkış Yap">
+                <IconButton onClick={handleLogout} title="Çıkış Yap">
                   <FaSignOutAlt />
                 </IconButton>
               </UserControls>
@@ -417,6 +452,7 @@ const Sidebar = ({
           )}
         </UserSection>
       </SidebarContainer>
+      
       {!showSidebar && (
         <MenuButton onClick={() => setShowSidebar(true)}>
           <FaBars />
