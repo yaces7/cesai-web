@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useNavigate } from 'react-router-dom';
-import { FaSun, FaMoon, FaUserCircle, FaSignOutAlt, FaShieldAlt } from 'react-icons/fa';
+import { FaSun, FaMoon, FaUserCircle, FaSignOutAlt, FaShieldAlt, FaArrowLeft } from 'react-icons/fa';
 
-const SettingsPage = () => {
+const SettingsPage = ({ toggleTheme }) => {
   const { user, loading, updateTheme, logout } = useFirebase();
   const navigate = useNavigate();
   const [userTheme, setUserTheme] = useState('dark');
@@ -29,8 +29,9 @@ const SettingsPage = () => {
       setUserTheme(theme);
       await updateTheme(user.uid, theme);
       
-      // Temayı uygula
+      // Temayı uygula ve ana bileşene bildir
       document.documentElement.setAttribute('data-theme', theme);
+      if (toggleTheme) toggleTheme(theme);
       
       setNotification({
         type: 'success',
@@ -64,6 +65,9 @@ const SettingsPage = () => {
     <Container>
       <SettingsCard>
         <Header>
+          <BackButton onClick={() => navigate('/')}>
+            <FaArrowLeft /> Geri
+          </BackButton>
           <Title>Kullanıcı Ayarları</Title>
           <LogoutButton onClick={handleLogout}>
             <FaSignOutAlt /> Çıkış Yap
@@ -141,18 +145,18 @@ const Container = styled.div`
   align-items: flex-start;
   min-height: 100vh;
   padding: 40px 20px;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  background: var(--bg-primary);
+  color: var(--text-primary);
 `;
 
 const SettingsCard = styled.div`
   width: 100%;
   max-width: 800px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
+  background: var(--bg-secondary);
   border-radius: 20px;
   padding: 30px;
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border-color);
 `;
 
 const Header = styled.div`
@@ -160,21 +164,42 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-color);
   padding-bottom: 20px;
 `;
 
+const BackButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 15px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+  }
+`;
+
 const Title = styled.h1`
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 28px;
   margin: 0;
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 `;
 
 const LogoutButton = styled.button`
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(220, 53, 69, 0.2);
+  background: rgba(220, 53, 69, 0.1);
   color: #ff6b6b;
   border: none;
   border-radius: 8px;
@@ -183,7 +208,7 @@ const LogoutButton = styled.button`
   transition: all 0.3s ease;
   
   &:hover {
-    background: rgba(220, 53, 69, 0.3);
+    background: rgba(220, 53, 69, 0.2);
   }
 `;
 
@@ -193,7 +218,7 @@ const UserSection = styled.div`
   margin-bottom: 30px;
   padding: 20px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--input-bg);
 `;
 
 const UserAvatar = styled.div`
@@ -202,11 +227,11 @@ const UserAvatar = styled.div`
   border-radius: 50%;
   overflow: hidden;
   margin-right: 20px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-primary);
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #ffffff;
+  color: var(--text-secondary);
   
   img {
     width: 100%;
@@ -220,13 +245,13 @@ const UserInfo = styled.div`
 `;
 
 const UserName = styled.h2`
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 20px;
   margin: 0 0 5px 0;
 `;
 
 const UserEmail = styled.p`
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin: 0 0 10px 0;
 `;
 
@@ -239,7 +264,7 @@ const VerifiedBadge = styled.span`
   display: flex;
   align-items: center;
   gap: 5px;
-  background: rgba(25, 135, 84, 0.2);
+  background: rgba(25, 135, 84, 0.1);
   color: #28a745;
   font-size: 14px;
   padding: 5px 10px;
@@ -247,7 +272,7 @@ const VerifiedBadge = styled.span`
 `;
 
 const UnverifiedBadge = styled.span`
-  background: rgba(255, 193, 7, 0.2);
+  background: rgba(255, 193, 7, 0.1);
   color: #ffc107;
   font-size: 14px;
   padding: 5px 10px;
@@ -257,43 +282,43 @@ const UnverifiedBadge = styled.span`
 const Section = styled.div`
   margin-bottom: 30px;
   padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
 `;
 
 const SectionTitle = styled.h3`
-  color: #ffffff;
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: var(--text-primary);
   font-size: 18px;
-  margin: 0 0 20px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 10px;
+  font-weight: 500;
 `;
 
 const ThemeOptions = styled.div`
   display: flex;
-  gap: 20px;
+  gap: 15px;
+  flex-wrap: wrap;
 `;
 
 const ThemeOption = styled.button`
-  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
-  padding: 15px;
-  background: ${props => props.active ? 'rgba(100, 108, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-  color: ${props => props.active ? '#646cff' : '#ffffff'};
-  border: 1px solid ${props => props.active ? '#646cff' : 'rgba(255, 255, 255, 0.1)'};
+  padding: 12px 20px;
   border-radius: 10px;
+  background: ${props => props.active ? 'var(--accent-color)' : 'var(--input-bg)'};
+  color: ${props => props.active ? '#ffffff' : 'var(--text-primary)'};
+  border: 1px solid ${props => props.active ? 'var(--accent-color)' : 'var(--border-color)'};
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   
   &:hover {
-    background: ${props => props.active ? 'rgba(100, 108, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'};
+    background: ${props => props.active ? 'var(--accent-color)' : 'var(--border-color)'};
   }
   
   &:disabled {
-    opacity: 0.7;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 `;
@@ -301,34 +326,33 @@ const ThemeOption = styled.button`
 const Stats = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
 `;
 
 const StatItem = styled.div`
   display: flex;
   justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  
-  &:last-child {
-    border-bottom: none;
-  }
+  align-items: center;
+  padding: 12px 15px;
+  background: var(--input-bg);
+  border-radius: 8px;
 `;
 
 const StatLabel = styled.span`
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
+  font-size: 14px;
 `;
 
 const StatValue = styled.span`
-  color: #ffffff;
+  color: var(--text-primary);
   font-weight: 500;
 `;
 
 const Notification = styled.div`
-  margin-bottom: 20px;
   padding: 12px 15px;
+  margin-bottom: 20px;
   border-radius: 8px;
-  background: ${props => props.type === 'success' ? 'rgba(25, 135, 84, 0.2)' : 'rgba(220, 53, 69, 0.2)'};
+  background: ${props => props.type === 'success' ? 'rgba(25, 135, 84, 0.1)' : 'rgba(220, 53, 69, 0.1)'};
   color: ${props => props.type === 'success' ? '#28a745' : '#dc3545'};
   text-align: center;
 `;
@@ -338,8 +362,9 @@ const LoadingScreen = styled.div`
   justify-content: center;
   align-items: center;
   height: 100vh;
-  color: #ffffff;
-  font-size: 20px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 18px;
 `;
 
 export default SettingsPage; 

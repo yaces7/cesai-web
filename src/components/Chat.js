@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { FaPaperPlane, FaSpinner, FaArrowDown } from 'react-icons/fa';
+import { FaPaperPlane, FaSpinner, FaArrowDown, FaImage, FaPaperclip } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 
 // Styled Components
@@ -10,7 +10,25 @@ const ChatContainer = styled.div`
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+`;
+
+const ChatHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  
+  h1 {
+    margin: 0;
+    font-size: 1.25rem;
+    background: linear-gradient(90deg, #646cff, #8b3dff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 `;
 
 const MessagesContainer = styled.div`
@@ -25,7 +43,7 @@ const MessagesContainer = styled.div`
   }
   
   &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.1);
   }
   
   &::-webkit-scrollbar-thumb {
@@ -44,37 +62,62 @@ const MessageBubble = styled.div`
   max-width: 70%;
   padding: 0.8rem 1rem;
   border-radius: 1rem;
-  background: ${props => props.isUser ? 'rgba(100, 108, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-  color: #ffffff;
+  background: ${props => props.isUser ? 'var(--accent-color)' : 'var(--bg-secondary)'};
+  color: ${props => props.isUser ? '#ffffff' : 'var(--text-primary)'};
   margin: ${props => props.isUser ? '0 0 0 1rem' : '0 1rem 0 0'};
-  border: 1px solid ${props => props.isUser ? 'rgba(100, 108, 255, 0.4)' : 'rgba(255, 255, 255, 0.1)'};
+  border: 1px solid ${props => props.isUser ? 'rgba(100, 108, 255, 0.4)' : 'var(--border-color)'};
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 `;
 
 const InputContainer = styled.form`
   display: flex;
   align-items: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
 `;
 
 const Input = styled.input`
   flex: 1;
   padding: 0.8rem 1rem;
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  border-radius: 1rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
   font-size: 1rem;
   outline: none;
   
   &:focus {
-    border-color: rgba(100, 108, 255, 0.5);
+    border-color: var(--accent-color);
+  }
+  
+  &::placeholder {
+    color: var(--text-secondary);
+  }
+`;
+
+const AttachButton = styled.button`
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  margin-right: 0.5rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: var(--accent-color);
+    background: var(--input-bg);
   }
 `;
 
 const SendButton = styled(motion.button)`
-  background: linear-gradient(135deg, #646cff 0%, #8b3dff 100%);
+  background: linear-gradient(135deg, #646cff, #8b3dff);
   color: white;
   border: none;
   border-radius: 50%;
@@ -96,7 +139,7 @@ const ScrollToBottomButton = styled(motion.button)`
   position: absolute;
   right: 1.5rem;
   bottom: 5rem;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--accent-color);
   color: white;
   border: none;
   border-radius: 50%;
@@ -196,6 +239,10 @@ const Chat = () => {
   
   return (
     <ChatContainer>
+      <ChatHeader>
+        <h1>CesAI</h1>
+      </ChatHeader>
+      
       <MessagesContainer ref={messagesContainerRef}>
         {messages.map((message, index) => (
           <MessageWrapper key={index} isUser={message.isUser}>
@@ -217,12 +264,17 @@ const Chat = () => {
       </MessagesContainer>
       
       <InputContainer onSubmit={handleSubmit}>
+        <AttachButton type="button">
+          <FaPaperclip />
+        </AttachButton>
+        
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Bir mesaj yazın..."
           disabled={loading}
         />
+        
         <SendButton
           type="submit"
           disabled={!input.trim() || loading}

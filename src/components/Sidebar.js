@@ -1,348 +1,264 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
-import { motion } from 'framer-motion';
-import { FaPlus, FaSignOutAlt, FaUser, FaRobot, FaHistory, FaInfoCircle, FaCog, FaTimes, FaBars, FaUserCircle } from 'react-icons/fa';
-import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import { useFirebase } from '../contexts/FirebaseContext';
 
-const SidebarContainer = styled(motion.div)`
-  width: 260px;
-  height: 100%;
-  background: rgba(30, 13, 61, 0.9);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+const SidebarContainer = styled.div`
   position: fixed;
-  z-index: 100;
   top: 0;
   left: 0;
+  width: 260px;
+  height: 100vh;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: transform 0.3s ease;
+  transform: translateX(${props => props.showSidebar ? '0' : '-100%'});
   
   @media (max-width: 768px) {
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    transform: translateX(${props => props.showSidebar ? '0' : '-100%'});
   }
 `;
 
-const NewChatButton = styled(motion.button)`
+const SidebarTop = styled.div`
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+`;
+
+const SidebarHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+`;
+
+const Logo = styled.div`
+  font-size: 1.5rem;
+  font-weight: bold;
+  background: linear-gradient(90deg, #646cff, #8b3dff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+`;
+
+const NewChatButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  margin: 16px;
-  padding: 12px;
-  background: rgba(79, 155, 255, 0.2);
-  border: 1px solid rgba(79, 155, 255, 0.5);
-  border-radius: 8px;
-  color: #E8DFD8;
-  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  color: white;
+  border: none;
   cursor: pointer;
   transition: all 0.2s ease;
   
   &:hover {
-    background: rgba(79, 155, 255, 0.3);
+    transform: scale(1.05);
+    background: linear-gradient(90deg, #646cff, #8b3dff);
   }
 `;
 
-const SidebarSection = styled.div`
-  margin-bottom: 16px;
-  
-  h3 {
-    padding: 0 16px;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: rgba(255, 255, 255, 0.6);
-    margin-bottom: 8px;
-  }
-`;
-
-const ModelSelector = styled.div`
-  margin: 0 16px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
+const NewChatDropdown = styled(motion.div)`
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+`;
+
+const NewChatOption = styled.button`
   display: flex;
   align-items: center;
-  gap: 10px;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
   
-  .model-icon {
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #4F9BFF, #9D4EDD);
-    border-radius: 6px;
-    color: white;
-  }
-  
-  .model-info {
-    flex: 1;
-    
-    .model-name {
-      font-size: 14px;
-      font-weight: 500;
-    }
-    
-    .model-version {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.6);
-    }
+  &:hover {
+    background: var(--input-bg);
   }
 `;
 
-const ConversationList = styled.div`
+const SidebarMiddle = styled.div`
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px;
-  max-height: calc(100vh - 350px);
+  padding: 1rem 0;
   
   &::-webkit-scrollbar {
-    width: 4px;
+    width: 6px;
   }
   
   &::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.1);
   }
   
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 2px;
+    border-radius: 3px;
   }
 `;
 
-const ConversationItem = styled(motion.div)`
-  padding: 10px 16px;
-  margin: 4px 0;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: ${props => props.active ? '#FFFFFF' : 'rgba(255, 255, 255, 0.8)'};
-  background: ${props => props.active ? 'rgba(79, 155, 255, 0.2)' : 'transparent'};
-  
-  &:hover {
-    background: ${props => props.active ? 'rgba(79, 155, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)'};
-  }
-  
-  .conversation-icon {
-    color: ${props => props.active ? '#4F9BFF' : 'rgba(255, 255, 255, 0.6)'};
-  }
-  
-  .conversation-title {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  
-  .conversation-date {
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.5);
-  }
+const SidebarSection = styled.div`
+  margin-bottom: 1rem;
 `;
 
-const UserSection = styled.div`
-  padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+const SectionTitle = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+`;
+
+const ConversationsList = styled(motion.div)`
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0 0.5rem;
+`;
+
+const ConversationItem = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  background: ${props => props.active ? 'var(--input-bg)' : 'transparent'};
+  color: var(--text-primary);
+  transition: background 0.2s;
+  
+  &:hover {
+    background: var(--input-bg);
+  }
+`;
+
+const ConversationIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.8rem;
+  color: var(--text-secondary);
+`;
+
+const ConversationText = styled.div`
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+`;
+
+const SidebarBottom = styled.div`
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
 `;
 
 const UserInfo = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
+  padding: 0.5rem 0;
 `;
 
 const UserAvatar = styled.div`
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4F9BFF, #9D4EDD);
+  background: var(--accent-color);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  overflow: hidden;
-  
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
+  font-weight: bold;
+  margin-right: 0.8rem;
+  font-size: 0.9rem;
+`;
+
+const UserDetails = styled.div`
+  flex: 1;
 `;
 
 const UserName = styled.div`
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
 `;
 
-const UserControls = styled.div`
+const UserStatus = styled.div`
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+`;
+
+const OptionsContainer = styled.div`
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 `;
 
 const IconButton = styled.button`
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  
-  &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
-  }
-`;
-
-const LoginButton = styled(Link)`
-  background: transparent;
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
   border: none;
-  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  transition: all 0.2s;
   
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
+    background: var(--border-color);
   }
 `;
 
 const UsageInfo = styled.div`
-  padding: 8px 16px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  text-align: center;
-  
-  .usage-count {
-    font-weight: 500;
-    color: ${props => props.count > 50 ? '#4F9BFF' : props.count > 20 ? '#FFB74D' : '#FF5252'};
-  }
-`;
-
-const CloseButton = styled.button`
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.8rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: var(--input-bg);
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  
-  &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
-  }
+  gap: 0.5rem;
 `;
 
-const MenuButton = styled.button`
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  z-index: 99;
-  background: rgba(30, 13, 61, 0.8);
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  
-  &:hover {
-    background: rgba(30, 13, 61, 1);
-    color: rgba(255, 255, 255, 0.9);
-  }
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  margin-top: 0.3rem;
+  overflow: hidden;
+`;
+
+const ProgressFill = styled.div`
+  height: 100%;
+  background: linear-gradient(90deg, #646cff, #8b3dff);
+  width: ${props => `${props.percentage}%`};
+  transition: width 0.3s ease;
 `;
 
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
-  const { user, logout, updateApiUsage } = useFirebase();
-  const [conversations, setConversations] = useState([]);
-  const [currentConversation, setCurrentConversation] = useState(null);
-  const [remainingRequests, setRemainingRequests] = useState(100);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [conversationsOpen, setConversationsOpen] = useState(true);
+  const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
+  const { user, logout } = useFirebase();
   const navigate = useNavigate();
-
-  // Ekran boyutunu izle
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Kullanıcı varsa sohbetleri getir
-  useEffect(() => {
-    if (user) {
-      fetchConversations();
-    } else {
-      setConversations([]);
-    }
-  }, [user]);
-
-  const fetchConversations = async () => {
-    try {
-      // Örnek sohbetler (gerçek API'den alınması gerekir)
-      setConversations([
-        { id: '1', title: 'Yeni Sohbet', createdAt: new Date().toISOString() }
-      ]);
-      setCurrentConversation('1');
-
-      // Kullanıcının API kullanım limitini kontrol et
-      if (user) {
-        try {
-          const usageLimit = user.usageLimit || 100;
-          setRemainingRequests(usageLimit);
-        } catch (error) {
-          console.error('API kullanımı kontrol edilirken hata oluştu:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Sohbetler alınırken hata oluştu:', error);
-    }
-  };
-
-  const createNewConversation = () => {
-    const newConversation = {
-      id: Date.now().toString(),
-      title: 'Yeni Sohbet',
-      createdAt: new Date().toISOString()
-    };
-    
-    setConversations([newConversation, ...conversations]);
-    setCurrentConversation(newConversation.id);
-  };
-
+  
   const handleLogout = async () => {
     try {
       await logout();
@@ -351,114 +267,115 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       console.error('Çıkış yapılırken hata oluştu:', error);
     }
   };
-
-  // Format date for display
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+  
+  const handleSettings = () => {
+    navigate('/settings');
   };
   
-  // Animation variants for mobile sidebar
-  const variants = {
-    open: { x: 0, opacity: 1 },
-    closed: { x: "-100%", opacity: 0 }
+  const handleNewChat = () => {
+    setShowNewChatDropdown(!showNewChatDropdown);
+  };
+  
+  const createNewChat = () => {
+    // Yeni sohbet oluşturma mantığı
+    console.log('Yeni sohbet oluşturuldu');
+    setShowNewChatDropdown(false);
+  };
+  
+  const getInitials = (name) => {
+    if (!name) return "?";
+    return name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
   };
   
   return (
-    <>
-      <SidebarContainer 
-        initial={false}
-        animate={showSidebar ? "open" : "closed"}
-        variants={isMobile ? variants : {}}
-        transition={{ duration: 0.3 }}
-        showSidebar={showSidebar}
-      >
-        <CloseButton onClick={() => setShowSidebar(false)}>
-          <FaTimes />
-        </CloseButton>
+    <SidebarContainer showSidebar={showSidebar}>
+      <SidebarTop>
+        <SidebarHeader>
+          <Logo>CesAI</Logo>
+          <NewChatButton onClick={handleNewChat}>
+            <FaPlus />
+          </NewChatButton>
+        </SidebarHeader>
         
-        <NewChatButton 
-          whileTap={{ scale: 0.95 }}
-          onClick={createNewConversation}
-        >
-          <FaPlus /> Yeni Sohbet
-        </NewChatButton>
-        
-        <SidebarSection>
-          <h3>Model</h3>
-          <ModelSelector>
-            <div className="model-icon">
-              <FaRobot />
-            </div>
-            <div className="model-info">
-              <div className="model-name">CesAI</div>
-              <div className="model-version">v1.0</div>
-            </div>
-          </ModelSelector>
-        </SidebarSection>
-        
-        <SidebarSection>
-          <h3>Sohbetler</h3>
-          <ConversationList>
-            {conversations.map(conversation => (
-              <ConversationItem 
-                key={conversation.id}
-                active={conversation.id === currentConversation}
-                onClick={() => {
-                  setCurrentConversation(conversation.id);
-                  if (isMobile) {
-                    setShowSidebar(false);
-                  }
-                }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <FaHistory className="conversation-icon" />
-                <div className="conversation-title">{conversation.title}</div>
-                <div className="conversation-date">{formatDate(conversation.createdAt)}</div>
-              </ConversationItem>
-            ))}
-          </ConversationList>
-        </SidebarSection>
-        
-        <UsageInfo count={remainingRequests}>
-          <FaInfoCircle style={{ marginRight: '5px' }} />
-          Bugün kalan istek: <span className="usage-count">{remainingRequests}</span>/100
-        </UsageInfo>
-        
-        <UserSection>
-          {user ? (
-            <>
-              <UserInfo>
-                <UserAvatar>
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt="Kullanıcı" />
-                  ) : (
-                    <FaUserCircle />
-                  )}
-                </UserAvatar>
-                <UserName>{user.name || user.displayName || 'Kullanıcı'}</UserName>
-              </UserInfo>
-              <UserControls>
-                <IconButton as={Link} to="/settings" title="Ayarlar">
-                  <FaCog />
-                </IconButton>
-                <IconButton onClick={handleLogout} title="Çıkış Yap">
-                  <FaSignOutAlt />
-                </IconButton>
-              </UserControls>
-            </>
-          ) : (
-            <LoginButton to="/login">Giriş Yap</LoginButton>
+        <AnimatePresence>
+          {showNewChatDropdown && (
+            <NewChatDropdown
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <NewChatOption onClick={createNewChat}>
+                <FaPlus style={{ marginRight: '8px' }} /> Yeni Sohbet Oluştur
+              </NewChatOption>
+            </NewChatDropdown>
           )}
-        </UserSection>
-      </SidebarContainer>
+        </AnimatePresence>
+      </SidebarTop>
       
-      {!showSidebar && (
-        <MenuButton onClick={() => setShowSidebar(true)}>
-          <FaBars />
-        </MenuButton>
-      )}
-    </>
+      <SidebarMiddle>
+        <SidebarSection>
+          <SectionTitle onClick={() => setConversationsOpen(!conversationsOpen)}>
+            <span>Sohbetler</span>
+            {conversationsOpen ? <FaChevronUp /> : <FaChevronDown />}
+          </SectionTitle>
+          
+          <AnimatePresence>
+            {conversationsOpen && (
+              <ConversationsList
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {Array.from({ length: 7 }).map((_, index) => (
+                  <ConversationItem key={index} active={index === 0}>
+                    <ConversationIcon>
+                      <FaRegClock />
+                    </ConversationIcon>
+                    <ConversationText>Yeni Sohbet {index + 1}</ConversationText>
+                  </ConversationItem>
+                ))}
+              </ConversationsList>
+            )}
+          </AnimatePresence>
+        </SidebarSection>
+      </SidebarMiddle>
+      
+      <SidebarBottom>
+        <UserInfo>
+          <UserAvatar>{user ? getInitials(user.name || user.email) : '?'}</UserAvatar>
+          <UserDetails>
+            <UserName>{user ? (user.name || user.email) : 'Misafir'}</UserName>
+            <UserStatus>{user ? 'Aktif' : 'Giriş yapılmadı'}</UserStatus>
+          </UserDetails>
+        </UserInfo>
+        
+        <OptionsContainer>
+          <IconButton onClick={handleSettings}>
+            <FaCog />
+          </IconButton>
+          <IconButton onClick={handleLogout}>
+            <FaSignOutAlt />
+          </IconButton>
+        </OptionsContainer>
+        
+        <UsageInfo>
+          <FaRegClock size={12} />
+          <div>
+            <div>Bugün kalan istek: {user ? '100/100' : '0'}</div>
+            <ProgressBar>
+              <ProgressFill percentage={100} />
+            </ProgressBar>
+          </div>
+        </UsageInfo>
+      </SidebarBottom>
+    </SidebarContainer>
   );
 };
 
