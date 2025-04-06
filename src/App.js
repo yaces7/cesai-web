@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import styled, { ThemeProvider } from 'styled-components';
 import ChatContainer from './components/ChatContainer';
 import Sidebar from './components/Sidebar';
@@ -70,9 +70,9 @@ function AppContent() {
                     showSidebar={showSidebar} 
                     setShowSidebar={setShowSidebar} 
                   />
-                  <ChatContainer showSidebar={showSidebar}>
+                  <MainContentContainer showSidebar={showSidebar}>
                     <Chat />
-                  </ChatContainer>
+                  </MainContentContainer>
                 </MainContainer>
               }
             />
@@ -94,7 +94,7 @@ const MainContainer = styled.div`
   height: 100vh;
 `;
 
-const ChatContainer = styled.div`
+const MainContentContainer = styled.div`
   flex: 1;
   margin-left: ${props => props.showSidebar ? '260px' : '0'};
   transition: margin-left 0.3s ease;

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
@@ -11,8 +11,8 @@ import {
   onAuthStateChanged,
   updateProfile
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
 
+// Firebase yapılandırması
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -22,11 +22,12 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
+// Firebase başlatma
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
+// Firebase context
 const FirebaseContext = createContext(null);
 
 export const useFirebase = () => useContext(FirebaseContext);
@@ -36,22 +37,45 @@ export const FirebaseProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Local storage'da kullanıcı verilerini kaydetme fonksiyonları
+  const saveUserToLocalStorage = (userData) => {
+    localStorage.setItem('userData', JSON.stringify(userData));
+  };
+
+  const getUserFromLocalStorage = () => {
+    const userData = localStorage.getItem('userData');
+    return userData ? JSON.parse(userData) : null;
+  };
+
+  // Authentication durumunu izle
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      if (authUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          // localStorage'dan kullanıcı verilerini al
+          const userData = getUserFromLocalStorage() || {};
           
-          if (!userDoc.exists()) {
-            // Kullanıcı document'i yoksa oluştur
-            const userData = {
-              uid: user.uid,
-              email: user.email,
-              name: user.displayName,
-              photoURL: user.photoURL,
-              createdAt: serverTimestamp(),
+          // Temel kullanıcı verilerini birleştir
+          const mergedUser = {
+            uid: authUser.uid,
+            email: authUser.email,
+            displayName: authUser.displayName,
+            photoURL: authUser.photoURL,
+            emailVerified: authUser.emailVerified,
+            ...userData
+          };
+          
+          // Kullanıcı veri yapısı doğru değilse oluştur
+          if (!userData || !userData.theme) {
+            const defaultUserData = {
+              uid: authUser.uid,
+              email: authUser.email,
+              name: authUser.displayName || '',
+              photoURL: authUser.photoURL || '',
+              createdAt: new Date().toISOString(),
+              lastLogin: new Date().toISOString(),
               isActive: true,
-              emailVerified: user.emailVerified,
+              emailVerified: authUser.emailVerified,
               role: 'user',
               usageLimit: 100,
               theme: 'dark',
@@ -59,17 +83,18 @@ export const FirebaseProvider = ({ children }) => {
               termsAccepted: false
             };
             
-            await initializeUserCollections(user, userData);
+            saveUserToLocalStorage(defaultUserData);
+            setUser(defaultUserData);
+          } else {
+            setUser(mergedUser);
           }
-          
-          const userData = userDoc.data();
-          setUser({ ...user, ...userData });
         } catch (error) {
           console.error("Kullanıcı bilgileri alınırken hata oluştu:", error);
-          setUser(user);
+          setUser(authUser);
         }
       } else {
         setUser(null);
+        localStorage.removeItem('userData');
       }
       setLoading(false);
     });
@@ -77,50 +102,7 @@ export const FirebaseProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  const initializeUserCollections = async (user, userData) => {
-    try {
-      // users koleksiyonu
-      await setDoc(doc(db, 'users', user.uid), userData);
-
-      // userPreferences koleksiyonu
-      await setDoc(doc(db, 'userPreferences', user.uid), {
-        theme: 'dark',
-        language: 'tr',
-        notifications: true,
-        emailNotifications: true,
-        lastUpdated: serverTimestamp()
-      });
-
-      // subscriptions koleksiyonu
-      await setDoc(doc(db, 'subscriptions', user.uid), {
-        planId: 'free',
-        startDate: serverTimestamp(),
-        endDate: null,
-        status: 'active',
-        autoRenew: false,
-        paymentMethod: null,
-        lastPayment: null,
-        nextPayment: null
-      });
-
-      // apiUsage koleksiyonu
-      await setDoc(doc(db, 'apiUsage', user.uid), {
-        totalRequests: 0,
-        monthlyRequests: 0,
-        dailyRequests: 0,
-        lastRequest: serverTimestamp(),
-        resetDate: serverTimestamp(),
-        limits: {
-          daily: 100,
-          monthly: 3000
-        }
-      });
-    } catch (error) {
-      console.error('Koleksiyon başlatma hatası:', error);
-      throw error;
-    }
-  };
-
+  // Kullanıcı kaydı
   const register = async (email, password, name) => {
     try {
       setError(null);
@@ -132,13 +114,14 @@ export const FirebaseProvider = ({ children }) => {
       // Email doğrulama gönder
       await sendEmailVerification(user);
       
-      // Tüm koleksiyonları başlat
+      // Varsayılan kullanıcı verilerini localStorage'a kaydet
       const userData = {
         uid: user.uid,
         email: user.email,
         name: name,
-        photoURL: user.photoURL,
-        createdAt: serverTimestamp(),
+        photoURL: user.photoURL || '',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
         isActive: true,
         emailVerified: false,
         role: 'user',
@@ -147,8 +130,9 @@ export const FirebaseProvider = ({ children }) => {
         isPlus: false,
         termsAccepted: false
       };
-
-      await initializeUserCollections(user, userData);
+      
+      saveUserToLocalStorage(userData);
+      setUser({ ...user, ...userData });
       
       return user;
     } catch (error) {
@@ -157,15 +141,22 @@ export const FirebaseProvider = ({ children }) => {
     }
   };
 
+  // Kullanıcı girişi
   const login = async (email, password) => {
     try {
       setError(null);
       const { user } = await signInWithEmailAndPassword(auth, email, password);
       
-      // Kullanıcı tercihlerini güncelle
-      await updateDoc(doc(db, 'users', user.uid), {
-        lastLogin: serverTimestamp()
-      });
+      // Mevcut kullanıcı verilerini al
+      const storedUserData = getUserFromLocalStorage() || {};
+      
+      // Son giriş tarihini güncelle
+      const updatedUserData = {
+        ...storedUserData,
+        lastLogin: new Date().toISOString()
+      };
+      
+      saveUserToLocalStorage(updatedUserData);
       
       return user;
     } catch (error) {
@@ -174,23 +165,25 @@ export const FirebaseProvider = ({ children }) => {
     }
   };
 
+  // Google ile giriş
   const signInWithGoogle = async () => {
     try {
       setError(null);
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
-      // Firestore'da kullanıcı var mı kontrol et
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      // Mevcut kullanıcı verilerini al veya yenisini oluştur
+      const storedUserData = getUserFromLocalStorage();
       
-      if (!userDoc.exists()) {
-        // Yeni kullanıcı için tüm koleksiyonları başlat
+      if (!storedUserData || storedUserData.uid !== user.uid) {
+        // Yeni kullanıcı için verileri oluştur
         const userData = {
           uid: user.uid,
           email: user.email,
-          name: user.displayName,
-          photoURL: user.photoURL,
-          createdAt: serverTimestamp(),
+          name: user.displayName || '',
+          photoURL: user.photoURL || '',
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
           isActive: true,
           emailVerified: true,
           role: 'user',
@@ -199,8 +192,16 @@ export const FirebaseProvider = ({ children }) => {
           isPlus: false,
           termsAccepted: false
         };
-
-        await initializeUserCollections(user, userData);
+        
+        saveUserToLocalStorage(userData);
+      } else {
+        // Son giriş tarihini güncelle
+        const updatedUserData = {
+          ...storedUserData,
+          lastLogin: new Date().toISOString()
+        };
+        
+        saveUserToLocalStorage(updatedUserData);
       }
       
       return user;
@@ -210,95 +211,89 @@ export const FirebaseProvider = ({ children }) => {
     }
   };
 
+  // Çıkış yapma
   const logout = async () => {
     try {
       await signOut(auth);
       setUser(null);
+      localStorage.removeItem('userData');
     } catch (error) {
       setError(error.message);
       throw error;
     }
   };
 
-  const acceptTerms = async (uid) => {
-    try {
-      await updateDoc(doc(db, 'users', uid), {
-        termsAccepted: true,
-        termsAcceptedAt: serverTimestamp()
-      });
-    } catch (error) {
-      setError(error.message);
-      throw error;
-    }
-  };
-
+  // Kullanıcı tercihlerini güncelleme
   const updateTheme = async (uid, theme) => {
     try {
-      await updateDoc(doc(db, 'users', uid), {
+      const userData = getUserFromLocalStorage();
+      if (!userData) return;
+      
+      const updatedUserData = {
+        ...userData,
         theme: theme
-      });
+      };
+      
+      saveUserToLocalStorage(updatedUserData);
+      setUser(prev => ({ ...prev, ...updatedUserData }));
+      
+      return true;
     } catch (error) {
       setError(error.message);
       throw error;
     }
   };
 
+  // API kullanımını takip etme
   const updateApiUsage = async (userId) => {
     try {
-      const apiUsageRef = doc(db, 'apiUsage', userId);
-      const apiUsageDoc = await getDoc(apiUsageRef);
-
-      if (!apiUsageDoc.exists()) {
-        // İlk kullanımda doküman oluştur
-        await setDoc(apiUsageRef, {
-          totalRequests: 1,
-          monthlyRequests: 1,
-          dailyRequests: 1,
-          lastRequest: serverTimestamp(),
-          resetDate: serverTimestamp(),
-          limits: {
-            daily: 100,
-            monthly: 3000
-          }
-        });
-        return true;
+      const userData = getUserFromLocalStorage();
+      if (!userData) return false;
+      
+      // Basit API kullanım takibi
+      const apiUsage = JSON.parse(localStorage.getItem('apiUsage') || '{}');
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Günlük kullanım
+      if (!apiUsage[today]) {
+        apiUsage[today] = 1;
+      } else {
+        apiUsage[today]++;
       }
-
-      const data = apiUsageDoc.data();
-      const now = new Date();
-      const lastRequest = data.lastRequest?.toDate() || now;
-      const resetDate = data.resetDate?.toDate() || now;
-
-      // Günlük limit kontrolü
-      if (now.getDate() !== lastRequest.getDate()) {
-        data.dailyRequests = 0;
-      }
-
-      // Aylık limit kontrolü
-      if (now.getMonth() !== lastRequest.getMonth()) {
-        data.monthlyRequests = 0;
-      }
-
-      // Limitleri kontrol et
-      if (data.dailyRequests >= data.limits.daily) {
+      
+      // Limiti kontrol et
+      const dailyLimit = userData.usageLimit || 100;
+      if (apiUsage[today] > dailyLimit) {
         throw new Error('Günlük API kullanım limitinize ulaştınız');
       }
-
-      if (data.monthlyRequests >= data.limits.monthly) {
-        throw new Error('Aylık API kullanım limitinize ulaştınız');
-      }
-
-      // Sayaçları güncelle
-      await updateDoc(apiUsageRef, {
-        totalRequests: increment(1),
-        monthlyRequests: increment(1),
-        dailyRequests: increment(1),
-        lastRequest: serverTimestamp()
-      });
-
-      return true;
+      
+      localStorage.setItem('apiUsage', JSON.stringify(apiUsage));
+      
+      return apiUsage[today];
     } catch (error) {
       console.error('API kullanım güncellemesi başarısız:', error);
+      throw error;
+    }
+  };
+
+  // Kullanıcı kabul şartlarını işaretleme
+  const acceptTerms = async (uid) => {
+    try {
+      const userData = getUserFromLocalStorage();
+      if (!userData) return;
+      
+      const updatedUserData = {
+        ...userData,
+        termsAccepted: true,
+        termsAcceptedAt: new Date().toISOString()
+      };
+      
+      saveUserToLocalStorage(updatedUserData);
+      setUser(prev => ({ ...prev, ...updatedUserData }));
+      
+      return true;
+    } catch (error) {
+      setError(error.message);
       throw error;
     }
   };

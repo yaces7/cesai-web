@@ -208,7 +208,7 @@ const Chat = () => {
         {loading && (
           <MessageWrapper isUser={false}>
             <MessageBubble isUser={false}>
-              <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+              <FaSpinner className="spinner" />
             </MessageBubble>
           </MessageWrapper>
         )}
