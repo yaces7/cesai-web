@@ -1,20 +1,38 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import firebase from 'firebase/app';
-import 'firebase/auth';
-import 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider,
+  signOut,
+  updateProfile,
+  sendEmailVerification
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot,
+  serverTimestamp,
+  increment,
+  runTransaction 
+} from 'firebase/firestore';
 import firebaseConfig from '../firebase/config';
 
 // Firebase yapılandırmasını başlat
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-} else {
-  firebase.app();
-}
-
-// Firebase servislerini al
-const auth = firebase.auth();
-const db = firebase.firestore();
-const googleProvider = new firebase.auth.GoogleAuthProvider();
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 
 // Context oluştur
 const FirebaseContext = createContext(null);
@@ -40,23 +58,25 @@ export const FirebaseProvider = ({ children }) => {
       if (authUser) {
         // Kullanıcı verisini Firestore'dan al
         try {
-          const userDoc = await db.collection('users').doc(authUser.uid).get();
+          const userDocRef = doc(db, 'users', authUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
           
-          if (userDoc.exists) {
+          if (userDocSnap.exists()) {
             // Kullanıcı verilerini güncelle
+            const userData = userDocSnap.data();
             setUser({
               uid: authUser.uid,
               email: authUser.email,
               emailVerified: authUser.emailVerified,
               displayName: authUser.displayName,
               photoURL: authUser.photoURL,
-              ...userDoc.data()
+              ...userData
             });
             
             // Tema ayarını kontrol et
-            if (userDoc.data().theme) {
-              setTheme(userDoc.data().theme);
-              document.documentElement.setAttribute('data-theme', userDoc.data().theme);
+            if (userData.theme) {
+              setTheme(userData.theme);
+              document.documentElement.setAttribute('data-theme', userData.theme);
             }
           } else {
             // Kullanıcı Firestore'da yoksa oluştur
@@ -69,11 +89,18 @@ export const FirebaseProvider = ({ children }) => {
               theme: 'dark',
               usageLimit: 100,
               usageCount: 0,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+              createdAt: serverTimestamp()
             };
             
-            await db.collection('users').doc(authUser.uid).set(userData);
-            setUser(userData);
+            await setDoc(userDocRef, userData);
+            setUser({
+              ...userData,
+              uid: authUser.uid,
+              email: authUser.email,
+              emailVerified: authUser.emailVerified,
+              displayName: authUser.displayName,
+              photoURL: authUser.photoURL
+            });
           }
         } catch (error) {
           console.error('Kullanıcı verisi alınırken hata oluştu:', error);
@@ -97,7 +124,7 @@ export const FirebaseProvider = ({ children }) => {
   // Giriş işlemi
   const login = async (email, password) => {
     try {
-      const userCredential = await auth.signInWithEmailAndPassword(email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
       return userCredential.user;
     } catch (error) {
       throw error;
@@ -107,13 +134,14 @@ export const FirebaseProvider = ({ children }) => {
   // Google ile giriş
   const signInWithGoogle = async () => {
     try {
-      const userCredential = await auth.signInWithPopup(googleProvider);
+      const userCredential = await signInWithPopup(auth, googleProvider);
       const user = userCredential.user;
       
       // Kullanıcı verisini kontrol et
-      const userDoc = await db.collection('users').doc(user.uid).get();
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
       
-      if (!userDoc.exists) {
+      if (!userDocSnap.exists()) {
         // Kullanıcı Firestore'da yoksa oluştur
         const userData = {
           uid: user.uid,
@@ -124,10 +152,10 @@ export const FirebaseProvider = ({ children }) => {
           theme: 'dark',
           usageLimit: 100,
           usageCount: 0,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          createdAt: serverTimestamp()
         };
         
-        await db.collection('users').doc(user.uid).set(userData);
+        await setDoc(userDocRef, userData);
       }
       
       return user;
@@ -139,16 +167,16 @@ export const FirebaseProvider = ({ children }) => {
   // Kayıt işlemi
   const register = async (email, password, name) => {
     try {
-      const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
       // İsim ata
-      await user.updateProfile({
+      await updateProfile(user, {
         displayName: name
       });
       
       // E-posta doğrulama gönder
-      await user.sendEmailVerification();
+      await sendEmailVerification(user);
       
       // Kullanıcıyı Firestore'a ekle
       const userData = {
@@ -160,10 +188,10 @@ export const FirebaseProvider = ({ children }) => {
         theme: 'dark',
         usageLimit: 100,
         usageCount: 0,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        createdAt: serverTimestamp()
       };
       
-      await db.collection('users').doc(user.uid).set(userData);
+      await setDoc(doc(db, 'users', user.uid), userData);
       
       return user;
     } catch (error) {
@@ -174,7 +202,7 @@ export const FirebaseProvider = ({ children }) => {
   // Çıkış işlemi
   const logout = async () => {
     try {
-      await auth.signOut();
+      await signOut(auth);
       return true;
     } catch (error) {
       throw error;
@@ -184,7 +212,8 @@ export const FirebaseProvider = ({ children }) => {
   // Tema güncelleme
   const updateTheme = async (userId, newTheme) => {
     try {
-      await db.collection('users').doc(userId).update({
+      const userDocRef = doc(db, 'users', userId);
+      await updateDoc(userDocRef, {
         theme: newTheme
       });
       
@@ -199,17 +228,17 @@ export const FirebaseProvider = ({ children }) => {
   // API kullanım limiti kontrolü
   const updateApiUsage = async (userId) => {
     try {
-      const userRef = db.collection('users').doc(userId);
+      const userDocRef = doc(db, 'users', userId);
       
       // Transaction kullanarak atomik güncelleştirme yap
-      await db.runTransaction(async (transaction) => {
-        const userDoc = await transaction.get(userRef);
+      await runTransaction(db, async (transaction) => {
+        const userDocSnap = await transaction.get(userDocRef);
         
-        if (!userDoc.exists) {
+        if (!userDocSnap.exists()) {
           throw new Error('Kullanıcı bulunamadı');
         }
         
-        const userData = userDoc.data();
+        const userData = userDocSnap.data();
         
         // Kullanım limitini kontrol et
         if (userData.usageCount >= userData.usageLimit) {
@@ -217,8 +246,8 @@ export const FirebaseProvider = ({ children }) => {
         }
         
         // Kullanım sayısını artır
-        transaction.update(userRef, {
-          usageCount: firebase.firestore.FieldValue.increment(1)
+        transaction.update(userDocRef, {
+          usageCount: increment(1)
         });
       });
       
@@ -233,6 +262,7 @@ export const FirebaseProvider = ({ children }) => {
     if (!user) throw new Error('Kullanıcı giriş yapmamış');
     
     try {
+      const conversationsCol = collection(db, 'conversations');
       const newConversation = {
         title,
         userId: user.uid,
@@ -246,7 +276,7 @@ export const FirebaseProvider = ({ children }) => {
         archived: false
       };
       
-      const docRef = await db.collection('conversations').add(newConversation);
+      const docRef = await setDoc(doc(conversationsCol), newConversation);
       return docRef.id;
     } catch (error) {
       throw error;
@@ -258,7 +288,8 @@ export const FirebaseProvider = ({ children }) => {
     if (!user) throw new Error('Kullanıcı giriş yapmamış');
     
     try {
-      await db.collection('conversations').doc(conversationId).update({
+      const conversationDocRef = doc(db, 'conversations', conversationId);
+      await updateDoc(conversationDocRef, {
         title: newTitle,
         updatedAt: new Date().toISOString()
       });
@@ -273,7 +304,8 @@ export const FirebaseProvider = ({ children }) => {
     if (!user) throw new Error('Kullanıcı giriş yapmamış');
     
     try {
-      await db.collection('conversations').doc(conversationId).update({
+      const conversationDocRef = doc(db, 'conversations', conversationId);
+      await updateDoc(conversationDocRef, {
         archived: true,
         updatedAt: new Date().toISOString()
       });
@@ -288,7 +320,8 @@ export const FirebaseProvider = ({ children }) => {
     if (!user) throw new Error('Kullanıcı giriş yapmamış');
     
     try {
-      await db.collection('conversations').doc(conversationId).delete();
+      const conversationDocRef = doc(db, 'conversations', conversationId);
+      await deleteDoc(conversationDocRef);
       return true;
     } catch (error) {
       throw error;
@@ -300,14 +333,14 @@ export const FirebaseProvider = ({ children }) => {
     if (!user) throw new Error('Kullanıcı giriş yapmamış');
     
     try {
-      const conversationRef = db.collection('conversations').doc(conversationId);
-      const conversationDoc = await conversationRef.get();
+      const conversationDocRef = doc(db, 'conversations', conversationId);
+      const conversationDocSnap = await getDoc(conversationDocRef);
       
-      if (!conversationDoc.exists) {
+      if (!conversationDocSnap.exists()) {
         throw new Error('Sohbet bulunamadı');
       }
       
-      const conversationData = conversationDoc.data();
+      const conversationData = conversationDocSnap.data();
       
       // Kullanıcıya ait sohbet mi kontrol et
       if (conversationData.userId !== user.uid) {
@@ -323,7 +356,7 @@ export const FirebaseProvider = ({ children }) => {
       
       const updatedMessages = [...(conversationData.messages || []), userMessage];
       
-      await conversationRef.update({
+      await updateDoc(conversationDocRef, {
         messages: updatedMessages,
         updatedAt: new Date().toISOString()
       });
@@ -342,14 +375,14 @@ export const FirebaseProvider = ({ children }) => {
     if (!user) throw new Error('Kullanıcı giriş yapmamış');
     
     try {
-      const conversationRef = db.collection('conversations').doc(conversationId);
-      const conversationDoc = await conversationRef.get();
+      const conversationDocRef = doc(db, 'conversations', conversationId);
+      const conversationDocSnap = await getDoc(conversationDocRef);
       
-      if (!conversationDoc.exists) {
+      if (!conversationDocSnap.exists()) {
         throw new Error('Sohbet bulunamadı');
       }
       
-      const conversationData = conversationDoc.data();
+      const conversationData = conversationDocSnap.data();
       
       // Kullanıcıya ait sohbet mi kontrol et
       if (conversationData.userId !== user.uid) {
@@ -365,7 +398,7 @@ export const FirebaseProvider = ({ children }) => {
       
       const updatedMessages = [...(conversationData.messages || []), aiMessage];
       
-      await conversationRef.update({
+      await updateDoc(conversationDocRef, {
         messages: updatedMessages,
         updatedAt: new Date().toISOString()
       });
@@ -383,13 +416,13 @@ export const FirebaseProvider = ({ children }) => {
     try {
       // Auth profilini güncelle
       if (updates.displayName) {
-        await auth.currentUser.updateProfile({
+        await updateProfile(auth.currentUser, {
           displayName: updates.displayName
         });
       }
       
       if (updates.photoURL) {
-        await auth.currentUser.updateProfile({
+        await updateProfile(auth.currentUser, {
           photoURL: updates.photoURL
         });
       }
@@ -401,7 +434,8 @@ export const FirebaseProvider = ({ children }) => {
       if (updates.photoURL) userUpdates.photoURL = updates.photoURL;
       
       if (Object.keys(userUpdates).length > 0) {
-        await db.collection('users').doc(user.uid).update(userUpdates);
+        const userDocRef = doc(db, 'users', user.uid);
+        await updateDoc(userDocRef, userUpdates);
       }
       
       // Kullanıcı nesnesini güncelle

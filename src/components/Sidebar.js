@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useFirebase } from '../contexts/FirebaseContext';
+import { collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 
 const SidebarContainer = styled.div`
   position: fixed;
@@ -338,27 +339,30 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     
     const fetchConversations = async () => {
       try {
-        const unsubscribe = db.collection('conversations')
-          .where('userId', '==', user.uid)
-          .where('archived', '==', false)
-          .orderBy('updatedAt', 'desc')
-          .onSnapshot(snapshot => {
-            const conversationsData = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-            setConversations(conversationsData);
-            
-            // URL'den aktif sohbeti belirle
-            const chatId = location.pathname.split('/chat/')[1];
-            if (chatId && conversationsData.some(conv => conv.id === chatId)) {
-              setActiveConversation(chatId);
-            } else if (conversationsData.length > 0 && !activeConversation) {
-              // Eğer aktif sohbet yoksa ve sohbetler varsa ilkini seç
-              setActiveConversation(conversationsData[0].id);
-              navigate(`/chat/${conversationsData[0].id}`);
-            }
-          });
+        const q = query(
+          collection(db, 'conversations'),
+          where('userId', '==', user.uid),
+          where('archived', '==', false),
+          orderBy('updatedAt', 'desc')
+        );
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const conversationsData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setConversations(conversationsData);
+          
+          // URL'den aktif sohbeti belirle
+          const chatId = location.pathname.split('/chat/')[1];
+          if (chatId && conversationsData.some(conv => conv.id === chatId)) {
+            setActiveConversation(chatId);
+          } else if (conversationsData.length > 0 && !activeConversation) {
+            // Eğer aktif sohbet yoksa ve sohbetler varsa ilkini seç
+            setActiveConversation(conversationsData[0].id);
+            navigate(`/chat/${conversationsData[0].id}`);
+          }
+        });
           
         return () => unsubscribe();
       } catch (error) {
@@ -415,7 +419,7 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
         archived: false
       };
       
-      const docRef = await db.collection('conversations').add(newChat);
+      const docRef = await addDoc(collection(db, 'conversations'), newChat);
       navigate(`/chat/${docRef.id}`);
       setShowNewChatDropdown(false);
     } catch (error) {
@@ -445,7 +449,8 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     if (!renaming.id || !renaming.title.trim()) return;
     
     try {
-      await db.collection('conversations').doc(renaming.id).update({
+      const conversationRef = doc(db, 'conversations', renaming.id);
+      await updateDoc(conversationRef, {
         title: renaming.title.trim(),
         updatedAt: new Date().toISOString()
       });
@@ -457,7 +462,8 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   
   const handleArchive = async (id) => {
     try {
-      await db.collection('conversations').doc(id).update({
+      const conversationRef = doc(db, 'conversations', id);
+      await updateDoc(conversationRef, {
         archived: true,
         updatedAt: new Date().toISOString()
       });
@@ -486,7 +492,8 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     if (!window.confirm('Bu sohbeti silmek istediğinizden emin misiniz?')) return;
     
     try {
-      await db.collection('conversations').doc(id).delete();
+      const conversationRef = doc(db, 'conversations', id);
+      await deleteDoc(conversationRef);
       
       if (activeConversation === id) {
         // Silinen sohbet aktifse başka bir sohbete yönlendir

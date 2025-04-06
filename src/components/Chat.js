@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate } from 'react-router-dom';
+import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 // Styled Components
 const ChatContainer = styled.div`
@@ -202,17 +203,17 @@ const Chat = () => {
     
     const fetchConversation = async () => {
       try {
-        const conversationRef = db.collection('conversations').doc(chatId);
+        const conversationRef = doc(db, 'conversations', chatId);
         
-        const unsubscribe = conversationRef.onSnapshot(doc => {
-          if (!doc.exists) {
+        const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
+          if (!docSnap.exists()) {
             setNotFound(true);
             return;
           }
           
           const conversationData = {
-            id: doc.id,
-            ...doc.data()
+            id: docSnap.id,
+            ...docSnap.data()
           };
           
           // Kullanıcıya ait sohbet mi kontrol et
@@ -285,7 +286,8 @@ const Chat = () => {
       // Önce kullanıcı mesajını ekle
       const updatedMessages = [...messages, userMessage];
       
-      await db.collection('conversations').doc(chatId).update({
+      const conversationRef = doc(db, 'conversations', chatId);
+      await updateDoc(conversationRef, {
         messages: updatedMessages,
         updatedAt: new Date().toISOString()
       });
@@ -303,7 +305,7 @@ const Chat = () => {
         
         const finalMessages = [...updatedMessages, aiResponse];
         
-        await db.collection('conversations').doc(chatId).update({
+        await updateDoc(conversationRef, {
           messages: finalMessages,
           updatedAt: new Date().toISOString()
         });
@@ -325,7 +327,8 @@ const Chat = () => {
       const updatedMessages = [...messages, errorMessage];
       
       try {
-        await db.collection('conversations').doc(chatId).update({
+        const conversationRef = doc(db, 'conversations', chatId);
+        await updateDoc(conversationRef, {
           messages: updatedMessages,
           updatedAt: new Date().toISOString()
         });
