@@ -188,6 +188,12 @@ const RegisterPage = () => {
     setLoading(true);
     setError('');
 
+    if (!name.trim()) {
+      setError('Lütfen ad ve soyad giriniz');
+      setLoading(false);
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Şifreler eşleşmiyor');
       setLoading(false);
@@ -201,12 +207,16 @@ const RegisterPage = () => {
     }
 
     try {
-      await register(email, password, name);
+      console.log('Kayıt işlemi başlatılıyor...');
+      const user = await register(email, password, name);
+      
+      console.log('Kayıt başarılı, doğrulama e-postası gönderildi');
       setSuccess(true);
       setTimeout(() => {
         navigate('/login');
       }, 5000);
     } catch (error) {
+      console.error('Kayıt hatası:', error);
       let errorMessage = 'Kayıt başarısız.';
       switch (error.code) {
         case 'auth/email-already-in-use':
@@ -218,6 +228,8 @@ const RegisterPage = () => {
         case 'auth/weak-password':
           errorMessage = 'Şifre çok zayıf. En az 6 karakter kullanın.';
           break;
+        default:
+          errorMessage = `Kayıt hatası: ${error.message}`;
       }
       setError(errorMessage);
     } finally {
@@ -228,11 +240,21 @@ const RegisterPage = () => {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
+    
     try {
-      await signInWithGoogle();
+      console.log('Google ile giriş başlatılıyor...');
+      const user = await signInWithGoogle();
+      
+      if (!user) {
+        throw new Error('Google ile giriş başarısız oldu. Kullanıcı bilgisi alınamadı.');
+      }
+      
+      console.log('Google ile giriş/kayıt başarılı:', user.displayName);
+      
       navigate('/chat');
     } catch (error) {
-      setError(error.message);
+      console.error('Google giriş hatası:', error);
+      setError(error.message || 'Google ile giriş sırasında bir hata oluştu.');
     } finally {
       setLoading(false);
     }
@@ -246,14 +268,15 @@ const RegisterPage = () => {
 
   if (success) {
     return (
-      <SuccessContainer>
-        <SuccessMessage>
-          <h2>Kayıt başarılı!</h2>
-          <p>Email adresinize doğrulama bağlantısı gönderildi.</p>
-          <p>Lütfen email'inizi kontrol edin ve bağlantıya tıklayarak hesabınızı doğrulayın.</p>
-          <p>5 saniye içinde giriş sayfasına yönlendirileceksiniz...</p>
-        </SuccessMessage>
-      </SuccessContainer>
+      <Container>
+        <GlassCard>
+          <Title>Kayıt Başarılı!</Title>
+          <SuccessMessage>
+            <p>Email adresinize doğrulama bağlantısı gönderildi. Lütfen e-postanızı kontrol edin ve hesabınızı doğrulayın.</p>
+            <p>5 saniye içinde giriş sayfasına yönlendirileceksiniz...</p>
+          </SuccessMessage>
+        </GlassCard>
+      </Container>
     );
   }
 
@@ -296,8 +319,13 @@ const RegisterPage = () => {
           CesAI'ya Kayıt Ol
         </Title>
 
-        <GoogleButton onClick={handleGoogleSignIn} disabled={loading}>
-          <FaGoogle /> Google ile Kayıt Ol
+        <GoogleButton 
+          onClick={handleGoogleSignIn} 
+          disabled={loading}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <FaGoogle /> {loading ? 'İşlem yapılıyor...' : 'Google ile Kayıt Ol'}
         </GoogleButton>
 
         <Divider>
@@ -351,15 +379,38 @@ const RegisterPage = () => {
             />
           </InputGroup>
 
-          {error && <ErrorMessage>{error}</ErrorMessage>}
+          {error && (
+            <ErrorMessage
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {error}
+            </ErrorMessage>
+          )}
 
-          <Button type="submit" disabled={loading}>
-            {loading ? "Kayıt yapılıyor..." : "Kayıt Ol"}
+          <Button
+            type="submit"
+            disabled={loading}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            {loading ? (
+              <>
+                <FaSpinner className="animate-spin" />
+                Kayıt Yapılıyor...
+              </>
+            ) : (
+              'Kayıt Ol'
+            )}
           </Button>
         </Form>
 
         <LoginLink>
-          Zaten hesabınız var mı? <Link to="/login">Giriş Yap</Link>
+          Zaten bir hesabınız var mı?{' '}
+          <Link to="/login">
+            Giriş Yapın
+          </Link>
         </LoginLink>
       </GlassCard>
     </Container>

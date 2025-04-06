@@ -124,9 +124,26 @@ export const FirebaseProvider = ({ children }) => {
   // Giriş işlemi
   const login = async (email, password) => {
     try {
+      console.log('Giriş işlemi başlatılıyor...');
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('Giriş başarılı');
       return userCredential.user;
     } catch (error) {
+      console.error('Giriş hatası:', error);
+      
+      // Daha açıklayıcı hata mesajları
+      if (error.code === 'auth/user-not-found') {
+        throw new Error('Bu e-posta adresiyle kayıtlı bir kullanıcı bulunamadı. Lütfen kayıt olun.');
+      } else if (error.code === 'auth/wrong-password') {
+        throw new Error('Hatalı şifre girdiniz. Lütfen tekrar deneyin.');
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error('Geçersiz e-posta formatı. Lütfen geçerli bir e-posta adresi girin.');
+      } else if (error.code === 'auth/user-disabled') {
+        throw new Error('Bu hesap devre dışı bırakılmıştır. Lütfen destek ekibiyle iletişime geçin.');
+      } else if (error.code === 'auth/too-many-requests') {
+        throw new Error('Çok fazla başarısız giriş denemesi. Lütfen daha sonra tekrar deneyin veya şifrenizi sıfırlayın.');
+      }
+      
       throw error;
     }
   };
@@ -134,14 +151,28 @@ export const FirebaseProvider = ({ children }) => {
   // Google ile giriş
   const signInWithGoogle = async () => {
     try {
+      console.log('Google ile giriş başlatılıyor...');
+      
+      // Daha fazla OAuth kapsam ekleyelim
+      googleProvider.addScope('profile');
+      googleProvider.addScope('email');
+      
+      // Kimlik doğrulama tercihlerini ayarlayalım 
+      googleProvider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      
       const userCredential = await signInWithPopup(auth, googleProvider);
       const user = userCredential.user;
+      
+      console.log('Google kimlik doğrulama başarılı:', user.displayName);
       
       // Kullanıcı verisini kontrol et
       const userDocRef = doc(db, 'users', user.uid);
       const userDocSnap = await getDoc(userDocRef);
       
       if (!userDocSnap.exists()) {
+        console.log('Yeni Google kullanıcısı, Firestore\'a kaydediliyor...');
         // Kullanıcı Firestore'da yoksa oluştur
         const userData = {
           uid: user.uid,
@@ -156,10 +187,26 @@ export const FirebaseProvider = ({ children }) => {
         };
         
         await setDoc(userDocRef, userData);
+        console.log('Kullanıcı Firestore\'a kaydedildi');
+      } else {
+        console.log('Mevcut Google kullanıcısı bulundu');
       }
       
       return user;
     } catch (error) {
+      console.error('Google ile giriş hatası:', error);
+      
+      // Daha açıklayıcı hata mesajları
+      if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error('Giriş penceresi kullanıcı tarafından kapatıldı. Lütfen tekrar deneyin.');
+      } else if (error.code === 'auth/popup-blocked') {
+        throw new Error('Tarayıcınız açılır pencereyi engelledi. Lütfen izin verin ve tekrar deneyin.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        throw new Error('Açılır pencere isteği iptal edildi. Lütfen tekrar deneyin.');
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        throw new Error('Bu e-posta adresi başka bir sağlayıcıyla ilişkilendirilmiştir. Farklı bir giriş yöntemi deneyin.');
+      }
+      
       throw error;
     }
   };
@@ -167,17 +214,21 @@ export const FirebaseProvider = ({ children }) => {
   // Kayıt işlemi
   const register = async (email, password, name) => {
     try {
+      console.log('Kullanıcı kaydı başlatılıyor...');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
+      console.log('Kullanıcı oluşturuldu, profil güncelleniyor...');
       // İsim ata
       await updateProfile(user, {
         displayName: name
       });
       
+      console.log('E-posta doğrulama gönderiliyor...');
       // E-posta doğrulama gönder
       await sendEmailVerification(user);
       
+      console.log('Kullanıcı Firestore\'a kaydediliyor...');
       // Kullanıcıyı Firestore'a ekle
       const userData = {
         uid: user.uid,
@@ -193,8 +244,22 @@ export const FirebaseProvider = ({ children }) => {
       
       await setDoc(doc(db, 'users', user.uid), userData);
       
+      console.log('Kayıt işlemi tamamlandı');
       return user;
     } catch (error) {
+      console.error('Kayıt hatası:', error);
+      
+      // Daha açıklayıcı hata mesajları
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error('Bu e-posta adresi zaten kullanımda. Lütfen giriş yapın veya farklı bir e-posta kullanın.');
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error('Geçersiz e-posta formatı. Lütfen geçerli bir e-posta adresi girin.');
+      } else if (error.code === 'auth/weak-password') {
+        throw new Error('Şifre çok zayıf. En az 6 karakter uzunluğunda bir şifre kullanın.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        throw new Error('E-posta/şifre girişi bu proje için devre dışı bırakılmış. Firebase konsolunda etkinleştirin.');
+      }
+      
       throw error;
     }
   };

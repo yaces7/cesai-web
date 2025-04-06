@@ -14,6 +14,12 @@ const ChatContainer = styled.div`
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
+  flex: 1;
+  margin-left: 260px;
+  
+  @media (max-width: 768px) {
+    margin-left: 0;
+  }
 `;
 
 const ChatHeader = styled.div`
@@ -183,6 +189,16 @@ const EmptyStateText = styled.p`
   line-height: 1.6;
 `;
 
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #ff6b6b;
+  text-align: center;
+`;
+
 // Chat Component
 const Chat = () => {
   const { chatId } = useParams();
@@ -191,8 +207,10 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingConversation, setLoadingConversation] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState(null);
   
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -201,11 +219,24 @@ const Chat = () => {
   useEffect(() => {
     if (!user || !chatId) return;
     
+    // Eğer chatId "new" ise, yükleme göstermeyin
+    if (chatId === "new") {
+      setConversation(null);
+      setMessages([]);
+      setNotFound(false);
+      return;
+    }
+    
+    setLoadingConversation(true);
+    setError(null);
+    
     const fetchConversation = async () => {
       try {
         const conversationRef = doc(db, 'conversations', chatId);
         
         const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
+          setLoadingConversation(false);
+          
           if (!docSnap.exists()) {
             setNotFound(true);
             return;
@@ -225,12 +256,18 @@ const Chat = () => {
           setConversation(conversationData);
           setMessages(conversationData.messages || []);
           setNotFound(false);
+        }, (err) => {
+          console.error('Sohbet dinlenirken hata oluştu:', err);
+          setError('Firebase erişim hatası: ' + err.message);
+          setLoadingConversation(false);
         });
         
         return () => unsubscribe();
       } catch (error) {
         console.error('Sohbet yüklenirken hata oluştu:', error);
+        setError('Firebase erişim hatası: ' + error.message);
         setNotFound(true);
+        setLoadingConversation(false);
       }
     };
     
@@ -271,7 +308,7 @@ const Chat = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!input.trim() || loading || !user || !chatId) return;
+    if (!input.trim() || loading || !user || !chatId || chatId === "new") return;
     
     const userMessage = {
       text: input.trim(),
@@ -316,6 +353,7 @@ const Chat = () => {
     } catch (error) {
       console.error('Mesaj gönderilirken hata oluştu:', error);
       setLoading(false);
+      setError('Mesaj gönderme hatası: ' + error.message);
       
       // Hata mesajını ekle
       const errorMessage = {
@@ -345,11 +383,42 @@ const Chat = () => {
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   };
   
+  // chatId yok veya "new" ise, boş içerik göster
+  if (!chatId || chatId === "new") {
+    return (
+      <ChatContainer>
+        <ChatHeader>
+          <h1>CesAI</h1>
+        </ChatHeader>
+        <EmptyStateContainer>
+          <EmptyStateTitle>Henüz sohbet seçilmedi</EmptyStateTitle>
+          <EmptyStateText>
+            Sol menüden bir sohbet seçin veya yeni bir sohbet başlatın.
+          </EmptyStateText>
+        </EmptyStateContainer>
+      </ChatContainer>
+    );
+  }
+  
   if (notFound) {
     return <Navigate to="/" replace />;
   }
   
-  if (!conversation && !notFound) {
+  if (error) {
+    return (
+      <ChatContainer>
+        <ChatHeader>
+          <h1>CesAI</h1>
+        </ChatHeader>
+        <ErrorContainer>
+          <h2>Bir hata oluştu</h2>
+          <p>{error}</p>
+        </ErrorContainer>
+      </ChatContainer>
+    );
+  }
+  
+  if (loadingConversation) {
     return (
       <ChatContainer>
         <ChatHeader>
@@ -417,12 +486,12 @@ const Chat = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Bir mesaj yazın..."
-          disabled={loading}
+          disabled={loading || !conversation}
         />
         
         <SendButton
           type="submit"
-          disabled={!input.trim() || loading}
+          disabled={!input.trim() || loading || !conversation}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >

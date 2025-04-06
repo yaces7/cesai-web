@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive } from 'react-icons/fa';
+import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive, FaSpinner } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
@@ -22,6 +22,15 @@ const SidebarContainer = styled.div`
   
   @media (max-width: 768px) {
     transform: translateX(${props => props.showSidebar ? '0' : '-100%'});
+  }
+  
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 `;
 
@@ -317,6 +326,14 @@ const EmptyStateMessage = styled.div`
   font-size: 0.9rem;
 `;
 
+const ErrorMessage = styled.div`
+  padding: 0.5rem;
+  color: #ff6b6b;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 0.5rem;
+`;
+
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
   const [conversationsOpen, setConversationsOpen] = useState(true);
   const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
@@ -324,6 +341,8 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   const [contextMenu, setContextMenu] = useState(null);
   const [activeConversation, setActiveConversation] = useState(null);
   const [renaming, setRenaming] = useState({ id: null, title: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   
   const { user, logout, db } = useFirebase();
   const navigate = useNavigate();
@@ -406,6 +425,9 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     if (!user) return;
     
     try {
+      setLoading(true);
+      setError(null);
+      
       const newChat = {
         title: 'Yeni Sohbet',
         userId: user.uid,
@@ -419,11 +441,17 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
         archived: false
       };
       
-      const docRef = await addDoc(collection(db, 'conversations'), newChat);
-      navigate(`/chat/${docRef.id}`);
+      const conversationsRef = collection(db, 'conversations');
+      const docRef = await addDoc(conversationsRef, newChat);
+      
       setShowNewChatDropdown(false);
+      navigate(`/chat/${docRef.id}`);
+      setActiveConversation(docRef.id);
     } catch (error) {
       console.error('Sohbet oluşturulurken hata oluştu:', error);
+      setError('Sohbet oluşturulurken hata oluştu: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -541,8 +569,8 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       <SidebarTop>
         <SidebarHeader>
           <Logo>CesAI</Logo>
-          <NewChatButton onClick={handleNewChat}>
-            <FaPlus />
+          <NewChatButton onClick={handleNewChat} disabled={loading}>
+            {loading ? <FaSpinner className="spinner" /> : <FaPlus />}
           </NewChatButton>
         </SidebarHeader>
         
@@ -561,6 +589,8 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
           )}
         </AnimatePresence>
       </SidebarTop>
+      
+      {error && <ErrorMessage>{error}</ErrorMessage>}
       
       <SidebarMiddle>
         <SidebarSection>

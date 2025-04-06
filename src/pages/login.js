@@ -196,12 +196,19 @@ const LoginPage = () => {
 
     try {
       const user = await login(email, password);
+      
+      // Email doğrulama kontrolü
       if (!user.emailVerified) {
+        setLoading(false);
         setError('Lütfen email adresinizi doğrulayın. Spam klasörünü kontrol etmeyi unutmayın.');
         return;
       }
+      
+      // Başarılı giriş - Firebase'den kullanıcı verileri zaten alınmış olmalı
+      console.log('Giriş başarılı, yönlendiriliyor...');
       navigate('/chat');
     } catch (error) {
+      console.error('Giriş hatası:', error);
       let errorMessage = 'Giriş başarısız.';
       switch (error.code) {
         case 'auth/user-not-found':
@@ -216,6 +223,8 @@ const LoginPage = () => {
         case 'auth/too-many-requests':
           errorMessage = 'Çok fazla başarısız giriş denemesi. Lütfen daha sonra tekrar deneyin.';
           break;
+        default:
+          errorMessage = `Giriş hatası: ${error.message}`;
       }
       setError(errorMessage);
     } finally {
@@ -226,11 +235,30 @@ const LoginPage = () => {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
+    
     try {
-      await signInWithGoogle();
+      console.log('Google ile giriş başlatılıyor...');
+      const user = await signInWithGoogle();
+      
+      if (!user) {
+        throw new Error('Google ile giriş başarısız oldu. Kullanıcı bilgisi alınamadı.');
+      }
+      
+      console.log('Google ile giriş başarılı:', user.displayName);
+      
+      // Google ile giriş yapan kullanıcıların e-postaları genellikle doğrulanmıştır
+      // Yine de kontrol edelim
+      if (!user.emailVerified) {
+        setError('Lütfen email adresinizi doğrulayın.');
+        setLoading(false);
+        return;
+      }
+      
+      // Yönlendirme işlemi
       navigate('/chat');
     } catch (error) {
-      setError(error.message);
+      console.error('Google giriş hatası:', error);
+      setError(error.message || 'Google ile giriş sırasında bir hata oluştu.');
     } finally {
       setLoading(false);
     }
@@ -280,6 +308,19 @@ const LoginPage = () => {
         >
           CesAI'ya Hoş Geldiniz
         </Title>
+
+        <GoogleButton 
+          type="button"
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <FaGoogle />
+          {loading ? 'Giriş yapılıyor...' : 'Google ile Giriş Yap'}
+        </GoogleButton>
+
+        <Divider>veya</Divider>
 
         <Form onSubmit={handleSubmit}>
           <InputGroup>
@@ -334,19 +375,6 @@ const LoginPage = () => {
             )}
           </Button>
         </Form>
-
-        <Divider>veya</Divider>
-
-        <GoogleButton
-          type="button"
-          onClick={handleGoogleSignIn}
-          disabled={loading}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <FaGoogle />
-          Google ile Giriş Yap
-        </GoogleButton>
 
         <RegisterLink>
           Hesabınız yok mu?{' '}

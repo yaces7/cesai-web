@@ -109,3 +109,42 @@ body {
   --gradient: linear-gradient(90deg, #646cff, #8b3dff);
   --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
+
+/* App.css */
+.app {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.welcome-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-left: 260px;
+  padding: 2rem;
+  text-align: center;
+}
+
+.welcome-container h1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(90deg, #646cff, #8b3dff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.welcome-container p {
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+}
+
+@media (max-width: 768px) {
+  .welcome-container {
+    margin-left: 0;
+  }
+}
