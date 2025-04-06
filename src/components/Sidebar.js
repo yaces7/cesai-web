@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
+import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive } from 'react-icons/fa';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useFirebase } from '../contexts/FirebaseContext';
 
 const SidebarContainer = styled.div`
@@ -139,6 +139,7 @@ const ConversationItem = styled.div`
   background: ${props => props.active ? 'var(--input-bg)' : 'transparent'};
   color: var(--text-primary);
   transition: background 0.2s;
+  position: relative;
   
   &:hover {
     background: var(--input-bg);
@@ -253,11 +254,132 @@ const ProgressFill = styled.div`
   transition: width 0.3s ease;
 `;
 
+const ContextMenu = styled.div`
+  position: absolute;
+  top: ${props => props.position.y}px;
+  left: ${props => props.position.x}px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  min-width: 150px;
+  overflow: hidden;
+`;
+
+const ContextMenuItem = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 0.9rem;
+  
+  svg {
+    margin-right: 0.8rem;
+    color: var(--text-secondary);
+  }
+  
+  &:hover {
+    background: var(--input-bg);
+  }
+  
+  &.danger {
+    color: #ff6b6b;
+    
+    svg {
+      color: #ff6b6b;
+    }
+  }
+`;
+
+const RenameInput = styled.input`
+  width: 100%;
+  padding: 0.6rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  
+  &:focus {
+    border-color: var(--accent-color);
+  }
+`;
+
+const EmptyStateMessage = styled.div`
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+`;
+
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
   const [conversationsOpen, setConversationsOpen] = useState(true);
   const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
-  const { user, logout } = useFirebase();
+  const [conversations, setConversations] = useState([]);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [renaming, setRenaming] = useState({ id: null, title: '' });
+  
+  const { user, logout, db } = useFirebase();
   const navigate = useNavigate();
+  const location = useLocation();
+  const contextMenuRef = useRef(null);
+  
+  // Firestore'dan sohbetleri çek
+  useEffect(() => {
+    if (!user) {
+      setConversations([]);
+      return;
+    }
+    
+    const fetchConversations = async () => {
+      try {
+        const unsubscribe = db.collection('conversations')
+          .where('userId', '==', user.uid)
+          .where('archived', '==', false)
+          .orderBy('updatedAt', 'desc')
+          .onSnapshot(snapshot => {
+            const conversationsData = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            setConversations(conversationsData);
+            
+            // URL'den aktif sohbeti belirle
+            const chatId = location.pathname.split('/chat/')[1];
+            if (chatId && conversationsData.some(conv => conv.id === chatId)) {
+              setActiveConversation(chatId);
+            } else if (conversationsData.length > 0 && !activeConversation) {
+              // Eğer aktif sohbet yoksa ve sohbetler varsa ilkini seç
+              setActiveConversation(conversationsData[0].id);
+              navigate(`/chat/${conversationsData[0].id}`);
+            }
+          });
+          
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Sohbetler yüklenirken hata oluştu:', error);
+      }
+    };
+    
+    fetchConversations();
+  }, [db, user, location.pathname, navigate, activeConversation]);
+  
+  // Dışarı tıklandığında context menüyü kapat
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target)) {
+        setContextMenu(null);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   const handleLogout = async () => {
     try {
@@ -276,10 +398,114 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     setShowNewChatDropdown(!showNewChatDropdown);
   };
   
-  const createNewChat = () => {
-    // Yeni sohbet oluşturma mantığı
-    console.log('Yeni sohbet oluşturuldu');
-    setShowNewChatDropdown(false);
+  const createNewChat = async () => {
+    if (!user) return;
+    
+    try {
+      const newChat = {
+        title: 'Yeni Sohbet',
+        userId: user.uid,
+        messages: [{
+          text: 'Merhaba! Size nasıl yardımcı olabilirim?',
+          isUser: false,
+          timestamp: new Date().toISOString()
+        }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archived: false
+      };
+      
+      const docRef = await db.collection('conversations').add(newChat);
+      navigate(`/chat/${docRef.id}`);
+      setShowNewChatDropdown(false);
+    } catch (error) {
+      console.error('Sohbet oluşturulurken hata oluştu:', error);
+    }
+  };
+  
+  const handleConversationClick = (id) => {
+    setActiveConversation(id);
+    navigate(`/chat/${id}`);
+  };
+  
+  const handleContextMenu = (e, conversation) => {
+    e.preventDefault();
+    setContextMenu({
+      id: conversation.id,
+      position: { x: e.clientX, y: e.clientY }
+    });
+  };
+  
+  const handleRename = (id, currentTitle) => {
+    setRenaming({ id, title: currentTitle });
+    setContextMenu(null);
+  };
+  
+  const submitRename = async () => {
+    if (!renaming.id || !renaming.title.trim()) return;
+    
+    try {
+      await db.collection('conversations').doc(renaming.id).update({
+        title: renaming.title.trim(),
+        updatedAt: new Date().toISOString()
+      });
+      setRenaming({ id: null, title: '' });
+    } catch (error) {
+      console.error('Sohbet yeniden adlandırılırken hata oluştu:', error);
+    }
+  };
+  
+  const handleArchive = async (id) => {
+    try {
+      await db.collection('conversations').doc(id).update({
+        archived: true,
+        updatedAt: new Date().toISOString()
+      });
+      
+      if (activeConversation === id) {
+        // Arşivlenen sohbet aktifse başka bir sohbete yönlendir
+        if (conversations.length > 1) {
+          const nextConversation = conversations.find(conv => conv.id !== id);
+          if (nextConversation) {
+            navigate(`/chat/${nextConversation.id}`);
+          } else {
+            navigate('/');
+          }
+        } else {
+          navigate('/');
+        }
+      }
+      
+      setContextMenu(null);
+    } catch (error) {
+      console.error('Sohbet arşivlenirken hata oluştu:', error);
+    }
+  };
+  
+  const handleDelete = async (id) => {
+    if (!window.confirm('Bu sohbeti silmek istediğinizden emin misiniz?')) return;
+    
+    try {
+      await db.collection('conversations').doc(id).delete();
+      
+      if (activeConversation === id) {
+        // Silinen sohbet aktifse başka bir sohbete yönlendir
+        if (conversations.length > 1) {
+          const nextConversation = conversations.find(conv => conv.id !== id);
+          if (nextConversation) {
+            navigate(`/chat/${nextConversation.id}`);
+          } else {
+            navigate('/');
+          }
+        } else {
+          navigate('/');
+        }
+      }
+      
+      setContextMenu(null);
+    } catch (error) {
+      console.error('Sohbet silinirken hata oluştu:', error);
+    }
   };
   
   const getInitials = (name) => {
@@ -290,6 +516,17 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       .join('')
       .toUpperCase()
       .substring(0, 2);
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    
+    if (date.toDateString() === today.toDateString()) {
+      return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    } else {
+      return date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+    }
   };
   
   return (
@@ -333,14 +570,41 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2 }}
               >
-                {Array.from({ length: 7 }).map((_, index) => (
-                  <ConversationItem key={index} active={index === 0}>
-                    <ConversationIcon>
-                      <FaRegClock />
-                    </ConversationIcon>
-                    <ConversationText>Yeni Sohbet {index + 1}</ConversationText>
-                  </ConversationItem>
-                ))}
+                {conversations.length > 0 ? (
+                  conversations.map((conversation) => (
+                    <ConversationItem 
+                      key={conversation.id} 
+                      active={activeConversation === conversation.id}
+                      onClick={() => handleConversationClick(conversation.id)}
+                      onContextMenu={(e) => handleContextMenu(e, conversation)}
+                    >
+                      <ConversationIcon>
+                        <FaRegClock />
+                      </ConversationIcon>
+                      {renaming.id === conversation.id ? (
+                        <RenameInput
+                          value={renaming.title}
+                          onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}
+                          onBlur={submitRename}
+                          onKeyDown={(e) => e.key === 'Enter' && submitRename()}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <>
+                          <ConversationText>{conversation.title}</ConversationText>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            {formatDate(conversation.updatedAt)}
+                          </div>
+                        </>
+                      )}
+                    </ConversationItem>
+                  ))
+                ) : (
+                  <EmptyStateMessage>
+                    Henüz hiç sohbet yok. Yeni bir sohbet başlatın!
+                  </EmptyStateMessage>
+                )}
               </ConversationsList>
             )}
           </AnimatePresence>
@@ -368,13 +632,30 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
         <UsageInfo>
           <FaRegClock size={12} />
           <div>
-            <div>Bugün kalan istek: {user ? '100/100' : '0'}</div>
+            <div>Bugün kalan istek: {user ? (user.usageLimit || 100) : 0}</div>
             <ProgressBar>
-              <ProgressFill percentage={100} />
+              <ProgressFill percentage={user ? ((user.usageLimit || 100) / 100) * 100 : 0} />
             </ProgressBar>
           </div>
         </UsageInfo>
       </SidebarBottom>
+      
+      {contextMenu && (
+        <ContextMenu position={contextMenu.position} ref={contextMenuRef}>
+          <ContextMenuItem onClick={() => handleRename(
+            contextMenu.id,
+            conversations.find(c => c.id === contextMenu.id)?.title || 'Yeni Sohbet'
+          )}>
+            <FaEdit /> Yeniden Adlandır
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => handleArchive(contextMenu.id)}>
+            <FaArchive /> Arşivle
+          </ContextMenuItem>
+          <ContextMenuItem className="danger" onClick={() => handleDelete(contextMenu.id)}>
+            <FaTrash /> Sil
+          </ContextMenuItem>
+        </ContextMenu>
+      )}
     </SidebarContainer>
   );
 };
