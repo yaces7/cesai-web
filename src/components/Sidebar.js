@@ -203,7 +203,7 @@ const UserDetails = styled.div`
 
 const UserName = styled.div`
   font-size: 0.9rem;
-  color: var(--text-primary);
+  color: var(--text-color);
 `;
 
 const UserStatus = styled.div`
@@ -329,6 +329,107 @@ const ConversationTime = styled.div`
   font-size: 11px;
   opacity: 0.7;
   margin-top: 2px;
+`;
+
+const ErrorMessage = styled.div`
+  padding: 0.5rem;
+  color: #ff6b6b;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 0.5rem;
+`;
+
+const BottomButtons = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+`;
+
+const BottomButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    color: var(--text-primary);
+    background: var(--border-color);
+  }
+`;
+
+const RenameModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1500;
+`;
+
+const RenameModalContent = styled.div`
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+`;
+
+const RenameModalTitle = styled.h3`
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+`;
+
+const RenameInput = styled.input`
+  width: 100%;
+  padding: 0.7rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  
+  &:focus {
+    border-color: var(--accent-color);
+  }
+`;
+
+const RenameModalButtons = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+`;
+
+const RenameModalButton = styled.button`
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  background: ${props => props.primary ? 'var(--accent-color)' : 'var(--bg-hover)'};
+  color: ${props => props.primary ? 'white' : 'var(--text-primary)'};
+  border: 1px solid ${props => props.primary ? 'var(--accent-color)' : 'var(--border-color)'};
+  
+  &:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
 `;
 
 const Sidebar = ({ showSidebar, setShowSidebar }) => {

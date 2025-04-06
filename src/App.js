@@ -135,7 +135,7 @@ function AppLayout() {
   
   return (
     <div className="app">
-      <Sidebar show={showSidebar} />
+      <Sidebar showSidebar={showSidebar} setShowSidebar={setShowSidebar} />
       <Chat toggleSidebar={toggleSidebar} sidebarVisible={showSidebar} />
     </div>
   );
