@@ -39,9 +39,35 @@ export const FirebaseProvider = ({ children }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        const userData = userDoc.data();
-        setUser({ ...user, ...userData });
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          
+          if (!userDoc.exists()) {
+            // Kullanıcı document'i yoksa oluştur
+            const userData = {
+              uid: user.uid,
+              email: user.email,
+              name: user.displayName,
+              photoURL: user.photoURL,
+              createdAt: serverTimestamp(),
+              isActive: true,
+              emailVerified: user.emailVerified,
+              role: 'user',
+              usageLimit: 100,
+              theme: 'dark',
+              isPlus: false,
+              termsAccepted: false
+            };
+            
+            await initializeUserCollections(user, userData);
+          }
+          
+          const userData = userDoc.data();
+          setUser({ ...user, ...userData });
+        } catch (error) {
+          console.error("Kullanıcı bilgileri alınırken hata oluştu:", error);
+          setUser(user);
+        }
       } else {
         setUser(null);
       }
@@ -135,10 +161,6 @@ export const FirebaseProvider = ({ children }) => {
     try {
       setError(null);
       const { user } = await signInWithEmailAndPassword(auth, email, password);
-      
-      if (!user.emailVerified) {
-        throw new Error('Lütfen email adresinizi doğrulayın');
-      }
       
       // Kullanıcı tercihlerini güncelle
       await updateDoc(doc(db, 'users', user.uid), {

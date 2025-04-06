@@ -1,7 +1,8 @@
 import React from 'react';
 import styled from '@emotion/styled';
 import { motion } from 'framer-motion';
-import { FaPlus, FaSignOutAlt, FaUser, FaRobot, FaHistory, FaInfoCircle } from 'react-icons/fa';
+import { FaPlus, FaSignOutAlt, FaUser, FaRobot, FaHistory, FaInfoCircle, FaCog, FaTimes, FaBars } from 'react-icons/fa';
+import { Link } from 'react-router-dom';
 
 const SidebarContainer = styled(motion.div)`
   width: 280px;
@@ -208,6 +209,100 @@ const UsageInfo = styled.div`
   }
 `;
 
+const CloseButton = styled.button`
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+`;
+
+const MenuButton = styled.button`
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+`;
+
+const UserAvatar = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4F9BFF, #9D4EDD);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+`;
+
+const UserName = styled.div`
+  font-size: 14px;
+  font-weight: 500;
+`;
+
+const UserControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const IconButton = styled.button`
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+`;
+
+const LoginButton = styled(Link)`
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+`;
+
 const Sidebar = ({ 
   user, 
   conversations, 
@@ -218,7 +313,9 @@ const Sidebar = ({
   isMobileOpen,
   setIsMobileOpen,
   remainingRequests,
-  isMobile
+  isMobile,
+  showSidebar,
+  setShowSidebar
 }) => {
   // Format date for display
   const formatDate = (dateString) => {
@@ -233,75 +330,99 @@ const Sidebar = ({
   };
   
   return (
-    <SidebarContainer 
-      initial={false}
-      animate={isMobileOpen ? "open" : "closed"}
-      variants={isMobile ? variants : {}}
-      transition={{ duration: 0.3 }}
-    >
-      <NewChatButton 
-        whileTap={{ scale: 0.95 }}
-        onClick={createNewConversation}
+    <>
+      <SidebarContainer 
+        initial={false}
+        animate={isMobileOpen ? "open" : "closed"}
+        variants={isMobile ? variants : {}}
+        transition={{ duration: 0.3 }}
+        showSidebar={showSidebar}
       >
-        <FaPlus /> Yeni Sohbet
-      </NewChatButton>
-      
-      <SidebarSection>
-        <h3>Model</h3>
-        <ModelSelector>
-          <div className="model-icon">
-            <FaRobot />
-          </div>
-          <div className="model-info">
-            <div className="model-name">CesAI</div>
-            <div className="model-version">v1.0</div>
-          </div>
-        </ModelSelector>
-      </SidebarSection>
-      
-      <SidebarSection>
-        <h3>Sohbetler</h3>
-        <ConversationList>
-          {conversations.map(conversation => (
-            <ConversationItem 
-              key={conversation.id}
-              active={conversation.id === currentConversation}
-              onClick={() => {
-                setCurrentConversation(conversation.id);
-                if (window.innerWidth <= 768) {
-                  setIsMobileOpen(false);
-                }
-              }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <FaHistory className="conversation-icon" />
-              <div className="conversation-title">{conversation.title}</div>
-              <div className="conversation-date">{formatDate(conversation.createdAt)}</div>
-            </ConversationItem>
-          ))}
-        </ConversationList>
-      </SidebarSection>
-      
-      <UsageInfo count={remainingRequests}>
-        <FaInfoCircle style={{ marginRight: '5px' }} />
-        Bugün kalan istek: <span className="usage-count">{remainingRequests}</span>/100
-      </UsageInfo>
-      
-      <UserSection>
-        <UserInfo>
-          <div className="user-avatar">
-            <FaUser />
-          </div>
-          <div>
-            <div className="user-name">{user?.name || 'Kullanıcı'}</div>
-            <div className="user-email">{user?.email || 'kullanici@example.com'}</div>
-          </div>
-        </UserInfo>
-        <LogoutButton onClick={onLogout}>
-          <FaSignOutAlt />
-        </LogoutButton>
-      </UserSection>
-    </SidebarContainer>
+        <CloseButton onClick={() => setShowSidebar(false)}>
+          <FaTimes />
+        </CloseButton>
+        
+        <NewChatButton 
+          whileTap={{ scale: 0.95 }}
+          onClick={createNewConversation}
+        >
+          <FaPlus /> Yeni Sohbet
+        </NewChatButton>
+        
+        <SidebarSection>
+          <h3>Model</h3>
+          <ModelSelector>
+            <div className="model-icon">
+              <FaRobot />
+            </div>
+            <div className="model-info">
+              <div className="model-name">CesAI</div>
+              <div className="model-version">v1.0</div>
+            </div>
+          </ModelSelector>
+        </SidebarSection>
+        
+        <SidebarSection>
+          <h3>Sohbetler</h3>
+          <ConversationList>
+            {conversations.map(conversation => (
+              <ConversationItem 
+                key={conversation.id}
+                active={conversation.id === currentConversation}
+                onClick={() => {
+                  setCurrentConversation(conversation.id);
+                  if (window.innerWidth <= 768) {
+                    setIsMobileOpen(false);
+                  }
+                }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <FaHistory className="conversation-icon" />
+                <div className="conversation-title">{conversation.title}</div>
+                <div className="conversation-date">{formatDate(conversation.createdAt)}</div>
+              </ConversationItem>
+            ))}
+          </ConversationList>
+        </SidebarSection>
+        
+        <UsageInfo count={remainingRequests}>
+          <FaInfoCircle style={{ marginRight: '5px' }} />
+          Bugün kalan istek: <span className="usage-count">{remainingRequests}</span>/100
+        </UsageInfo>
+        
+        <UserSection>
+          {user ? (
+            <>
+              <UserInfo>
+                <UserAvatar>
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="User" />
+                  ) : (
+                    <FaUser />
+                  )}
+                </UserAvatar>
+                <UserName>{user.name || user.displayName}</UserName>
+              </UserInfo>
+              <UserControls>
+                <IconButton as={Link} to="/settings" title="Ayarlar">
+                  <FaCog />
+                </IconButton>
+                <IconButton onClick={onLogout} title="Çıkış Yap">
+                  <FaSignOutAlt />
+                </IconButton>
+              </UserControls>
+            </>
+          ) : (
+            <LoginButton to="/login">Giriş Yap</LoginButton>
+          )}
+        </UserSection>
+      </SidebarContainer>
+      {!showSidebar && (
+        <MenuButton onClick={() => setShowSidebar(true)}>
+          <FaBars />
+        </MenuButton>
+      )}
+    </>
   );
 };
 

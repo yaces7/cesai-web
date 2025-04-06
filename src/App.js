@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import styled from '@emotion/styled';
+import styled, { ThemeProvider } from 'styled-components';
 import ChatContainer from './components/ChatContainer';
 import Sidebar from './components/Sidebar';
 import Login from './pages/login';
 import Register from './pages/register';
 import { FirebaseProvider } from './contexts/FirebaseContext';
 import './App.css';
+import Chat from './components/Chat';
+import Settings from './pages/settings';
+import { GlobalStyles, darkTheme, lightTheme } from './styles/globalStyles';
 
 const AppContainer = styled.div`
   display: flex;
@@ -22,6 +25,22 @@ const MainContent = styled.div`
   position: relative;
 `;
 
+const MainContainer = styled.div`
+  display: flex;
+  height: 100vh;
+`;
+
+const ChatContainer = styled.div`
+  flex: 1;
+  margin-left: ${props => props.showSidebar ? '260px' : '0'};
+  transition: margin-left 0.3s ease;
+  position: relative;
+
+  @media (max-width: 768px) {
+    margin-left: 0;
+  }
+`;
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
@@ -30,6 +49,8 @@ function App() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [remainingRequests, setRemainingRequests] = useState(100);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [theme, setTheme] = useState('dark');
 
   // Check if user is already logged in
   useEffect(() => {
@@ -50,6 +71,13 @@ function App() {
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Tema değişikliğini localStorage'dan al
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
 
   const fetchConversations = async (token) => {
@@ -103,65 +131,52 @@ function App() {
     setRemainingRequests(count);
   };
 
+  // Tema değiştiğinde uygula
+  const toggleTheme = (newTheme) => {
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+  };
+
   return (
-    <FirebaseProvider>
-      <Router>
-        <AppContainer>
-          {isAuthenticated && (
-            <Sidebar 
-              user={user}
-              conversations={conversations}
-              currentConversation={currentConversation}
-              setCurrentConversation={setCurrentConversation}
-              createNewConversation={createNewConversation}
-              onLogout={handleLogout}
-              isMobileOpen={isMobile ? isMobileSidebarOpen : true}
-              setIsMobileOpen={setIsMobileSidebarOpen}
-              remainingRequests={remainingRequests}
-              isMobile={isMobile}
-            />
-          )}
-          <MainContent>
+    <ThemeProvider theme={theme === 'dark' ? darkTheme : lightTheme}>
+      <GlobalStyles />
+      <FirebaseProvider>
+        <Router>
+          <AppContainer>
             <Routes>
-              <Route 
-                path="/" 
+              <Route path="/login" element={<Login onLogin={handleLogin} />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/settings" element={<Settings toggleTheme={toggleTheme} />} />
+              <Route
+                path="/*"
                 element={
-                  isAuthenticated ? (
-                    <ChatContainer 
-                      conversationId={currentConversation}
-                      toggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-                      updateRemainingRequests={updateRemainingRequests}
+                  <MainContainer>
+                    <Sidebar 
+                      user={user}
+                      conversations={conversations}
+                      currentConversation={currentConversation}
+                      setCurrentConversation={setCurrentConversation}
+                      createNewConversation={createNewConversation}
+                      onLogout={handleLogout}
+                      isMobileOpen={isMobile ? isMobileSidebarOpen : true}
+                      setIsMobileOpen={setIsMobileSidebarOpen}
+                      remainingRequests={remainingRequests}
+                      isMobile={isMobile}
+                      showSidebar={showSidebar}
+                      setShowSidebar={setShowSidebar}
                     />
-                  ) : (
-                    <Navigate to="/login" />
-                  )
-                } 
-              />
-              <Route 
-                path="/login" 
-                element={
-                  !isAuthenticated ? (
-                    <Login onLogin={handleLogin} />
-                  ) : (
-                    <Navigate to="/" />
-                  )
-                } 
-              />
-              <Route 
-                path="/register" 
-                element={
-                  !isAuthenticated ? (
-                    <Register />
-                  ) : (
-                    <Navigate to="/" />
-                  )
-                } 
+                    <ChatContainer showSidebar={showSidebar}>
+                      <Chat />
+                    </ChatContainer>
+                  </MainContainer>
+                }
               />
             </Routes>
-          </MainContent>
-        </AppContainer>
-      </Router>
-    </FirebaseProvider>
+          </AppContainer>
+        </Router>
+      </FirebaseProvider>
+    </ThemeProvider>
   );
 }
 
