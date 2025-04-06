@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive, FaSpinner } from 'react-icons/fa';
+import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive, FaSpinner, FaThumbtack, FaUnlink } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
@@ -265,73 +265,70 @@ const ProgressFill = styled.div`
 `;
 
 const ContextMenu = styled.div`
-  position: absolute;
-  top: ${props => props.position.y}px;
-  left: ${props => props.position.x}px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  position: fixed;
+  background-color: var(--bg-secondary);
   border-radius: 8px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
   z-index: 1000;
-  min-width: 150px;
   overflow: hidden;
+  min-width: 200px;
 `;
 
 const ContextMenuItem = styled.div`
+  padding: 10px 16px;
   display: flex;
   align-items: center;
-  padding: 0.6rem 1rem;
-  color: var(--text-primary);
+  gap: 8px;
   cursor: pointer;
-  transition: background 0.2s;
-  font-size: 0.9rem;
-  
-  svg {
-    margin-right: 0.8rem;
-    color: var(--text-secondary);
-  }
+  color: ${props => props.danger ? 'var(--error-color)' : 'var(--text-color)'};
   
   &:hover {
-    background: var(--input-bg);
+    background-color: var(--bg-hover);
   }
   
-  &.danger {
-    color: #ff6b6b;
-    
-    svg {
-      color: #ff6b6b;
-    }
+  svg {
+    font-size: 14px;
   }
 `;
 
-const RenameInput = styled.input`
-  width: 100%;
-  padding: 0.6rem;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
+const ContextMenuDivider = styled.div`
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+`;
+
+const ConversationItemWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
   border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  outline: none;
+  margin-bottom: 2px;
+  background-color: ${props => props.active ? 'var(--bg-hover)' : 'transparent'};
   
-  &:focus {
-    border-color: var(--accent-color);
+  &:hover {
+    background-color: var(--bg-hover);
   }
 `;
 
-const EmptyStateMessage = styled.div`
-  padding: 1rem;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
+const ConversationDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
 `;
 
-const ErrorMessage = styled.div`
-  padding: 0.5rem;
-  color: #ff6b6b;
-  font-size: 0.8rem;
-  text-align: center;
-  margin-top: 0.5rem;
+const ConversationTitle = styled.div`
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+`;
+
+const ConversationTime = styled.div`
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 2px;
 `;
 
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
@@ -343,8 +340,10 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   const [renaming, setRenaming] = useState({ id: null, title: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [pinnedConversations, setPinnedConversations] = useState([]);
+  const [showPinnedSection, setShowPinnedSection] = useState(true);
   
-  const { user, logout, db } = useFirebase();
+  const { user, logout, db, createConversation } = useFirebase();
   const navigate = useNavigate();
   const location = useLocation();
   const contextMenuRef = useRef(null);
@@ -353,6 +352,7 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   useEffect(() => {
     if (!user) {
       setConversations([]);
+      setPinnedConversations([]);
       return;
     }
     
@@ -370,7 +370,13 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
             id: doc.id,
             ...doc.data()
           }));
-          setConversations(conversationsData);
+          
+          // Sabitlenmiş sohbetleri ayır
+          const pinned = conversationsData.filter(c => c.pinned);
+          const unpinned = conversationsData.filter(c => !c.pinned);
+          
+          setPinnedConversations(pinned);
+          setConversations(unpinned);
           
           // URL'den aktif sohbeti belirle
           const chatId = location.pathname.split('/chat/')[1];
@@ -428,25 +434,11 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       setLoading(true);
       setError(null);
       
-      const newChat = {
-        title: 'Yeni Sohbet',
-        userId: user.uid,
-        messages: [{
-          text: 'Merhaba! Size nasıl yardımcı olabilirim?',
-          isUser: false,
-          timestamp: new Date().toISOString()
-        }],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        archived: false
-      };
-      
-      const conversationsRef = collection(db, 'conversations');
-      const docRef = await addDoc(conversationsRef, newChat);
+      const chatId = await createConversation('Yeni Sohbet');
       
       setShowNewChatDropdown(false);
-      navigate(`/chat/${docRef.id}`);
-      setActiveConversation(docRef.id);
+      navigate(`/chat/${chatId}`);
+      setActiveConversation(chatId);
     } catch (error) {
       console.error('Sohbet oluşturulurken hata oluştu:', error);
       setError('Sohbet oluşturulurken hata oluştu: ' + error.message);
@@ -464,7 +456,8 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     e.preventDefault();
     setContextMenu({
       id: conversation.id,
-      position: { x: e.clientX, y: e.clientY }
+      position: { x: e.clientX, y: e.clientY },
+      isPinned: conversation.pinned || false
     });
   };
   
@@ -488,6 +481,20 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     }
   };
   
+  const handlePin = async (id, currentPin) => {
+    try {
+      const conversationRef = doc(db, 'conversations', id);
+      await updateDoc(conversationRef, {
+        pinned: !currentPin,
+        updatedAt: new Date().toISOString()
+      });
+      
+      setContextMenu(null);
+    } catch (error) {
+      console.error('Sohbet sabitleme durumu değiştirilirken hata oluştu:', error);
+    }
+  };
+  
   const handleArchive = async (id) => {
     try {
       const conversationRef = doc(db, 'conversations', id);
@@ -498,8 +505,9 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       
       if (activeConversation === id) {
         // Arşivlenen sohbet aktifse başka bir sohbete yönlendir
-        if (conversations.length > 1) {
-          const nextConversation = conversations.find(conv => conv.id !== id);
+        if (conversations.length > 1 || pinnedConversations.length > 0) {
+          const allConvs = [...pinnedConversations, ...conversations];
+          const nextConversation = allConvs.find(conv => conv.id !== id);
           if (nextConversation) {
             navigate(`/chat/${nextConversation.id}`);
           } else {
@@ -525,8 +533,9 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       
       if (activeConversation === id) {
         // Silinen sohbet aktifse başka bir sohbete yönlendir
-        if (conversations.length > 1) {
-          const nextConversation = conversations.find(conv => conv.id !== id);
+        if (conversations.length > 1 || pinnedConversations.length > 0) {
+          const allConvs = [...pinnedConversations, ...conversations];
+          const nextConversation = allConvs.find(conv => conv.id !== id);
           if (nextConversation) {
             navigate(`/chat/${nextConversation.id}`);
           } else {
@@ -553,6 +562,60 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       .substring(0, 2);
   };
 
+  // Tarihleri gruplamak için yardımcı fonksiyonlar
+  const isToday = (dateString) => {
+    const today = new Date();
+    const date = new Date(dateString);
+    return date.toDateString() === today.toDateString();
+  };
+  
+  const isYesterday = (dateString) => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const date = new Date(dateString);
+    return date.toDateString() === yesterday.toDateString();
+  };
+  
+  const isThisWeek = (dateString) => {
+    const today = new Date();
+    const date = new Date(dateString);
+    const diffTime = today - date;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays < 7 && diffDays > 1;
+  };
+  
+  const isOlder = (dateString) => {
+    const today = new Date();
+    const date = new Date(dateString);
+    const diffTime = today - date;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays >= 7;
+  };
+  
+  // Sohbetleri tarihe göre grupla
+  const groupConversationsByDate = (conversations) => {
+    const today = [];
+    const yesterday = [];
+    const thisWeek = [];
+    const older = [];
+    
+    conversations.forEach(conv => {
+      const updatedAt = conv.updatedAt || conv.createdAt;
+      
+      if (isToday(updatedAt)) {
+        today.push(conv);
+      } else if (isYesterday(updatedAt)) {
+        yesterday.push(conv);
+      } else if (isThisWeek(updatedAt)) {
+        thisWeek.push(conv);
+      } else {
+        older.push(conv);
+      }
+    });
+    
+    return { today, yesterday, thisWeek, older };
+  };
+  
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     const today = new Date();
@@ -564,6 +627,66 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     }
   };
   
+  // Sohbetleri grupla
+  const groupedConversations = groupConversationsByDate(conversations);
+  
+  // Context menü içeriği
+  const renderContextMenu = () => {
+    if (!contextMenu) return null;
+    
+    const conversation = [...pinnedConversations, ...conversations].find(
+      conv => conv.id === contextMenu.id
+    );
+    
+    if (!conversation) return null;
+    
+    return (
+      <ContextMenu 
+        ref={contextMenuRef}
+        style={{ 
+          top: `${contextMenu.position.y}px`, 
+          left: `${contextMenu.position.x}px` 
+        }}
+      >
+        <ContextMenuItem onClick={() => handleRename(contextMenu.id, conversation.title)}>
+          <FaEdit /> Yeniden Adlandır
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => handlePin(contextMenu.id, contextMenu.isPinned)}>
+          {contextMenu.isPinned ? <FaUnlink /> : <FaThumbtack />}
+          {contextMenu.isPinned ? 'Sabitlemeyi Kaldır' : 'Sabitle'}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => handleArchive(contextMenu.id)}>
+          <FaArchive /> Arşivle
+        </ContextMenuItem>
+        <ContextMenuDivider />
+        <ContextMenuItem onClick={() => handleDelete(contextMenu.id)} danger>
+          <FaTrash /> Sil
+        </ContextMenuItem>
+      </ContextMenu>
+    );
+  };
+  
+  // Sohbet listesi öğesi bileşeni
+  const ConversationItem = ({ conversation, active }) => (
+    <ConversationItemWrapper
+      active={active}
+      onClick={() => handleConversationClick(conversation.id)}
+      onContextMenu={(e) => handleContextMenu(e, conversation)}
+    >
+      <ConversationIcon>
+        {conversation.pinned ? <FaThumbtack /> : <FaRegClock />}
+      </ConversationIcon>
+      <ConversationDetails>
+        <ConversationTitle>
+          {conversation.title}
+        </ConversationTitle>
+        <ConversationTime>
+          {formatDate(conversation.updatedAt || conversation.createdAt)}
+        </ConversationTime>
+      </ConversationDetails>
+    </ConversationItemWrapper>
+  );
+
   return (
     <SidebarContainer showSidebar={showSidebar}>
       <SidebarTop>
@@ -593,105 +716,151 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       {error && <ErrorMessage>{error}</ErrorMessage>}
       
       <SidebarMiddle>
-        <SidebarSection>
-          <SectionTitle onClick={() => setConversationsOpen(!conversationsOpen)}>
-            <span>Sohbetler</span>
-            {conversationsOpen ? <FaChevronUp /> : <FaChevronDown />}
-          </SectionTitle>
-          
-          <AnimatePresence>
-            {conversationsOpen && (
-              <ConversationsList
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                {conversations.length > 0 ? (
-                  conversations.map((conversation) => (
+        {/* Sabitlenmiş Sohbetler */}
+        {pinnedConversations.length > 0 && (
+          <SidebarSection>
+            <SectionTitle onClick={() => setShowPinnedSection(!showPinnedSection)}>
+              <span>Sabitlenmiş</span>
+              {showPinnedSection ? <FaChevronUp /> : <FaChevronDown />}
+            </SectionTitle>
+            
+            <AnimatePresence>
+              {showPinnedSection && (
+                <ConversationsList
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {pinnedConversations.map((conversation) => (
                     <ConversationItem 
-                      key={conversation.id} 
+                      key={conversation.id}
+                      conversation={conversation}
                       active={activeConversation === conversation.id}
-                      onClick={() => handleConversationClick(conversation.id)}
-                      onContextMenu={(e) => handleContextMenu(e, conversation)}
-                    >
-                      <ConversationIcon>
-                        <FaRegClock />
-                      </ConversationIcon>
-                      {renaming.id === conversation.id ? (
-                        <RenameInput
-                          value={renaming.title}
-                          onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}
-                          onBlur={submitRename}
-                          onKeyDown={(e) => e.key === 'Enter' && submitRename()}
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <>
-                          <ConversationText>{conversation.title}</ConversationText>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                            {formatDate(conversation.updatedAt)}
-                          </div>
-                        </>
-                      )}
-                    </ConversationItem>
-                  ))
-                ) : (
-                  <EmptyStateMessage>
-                    Henüz hiç sohbet yok. Yeni bir sohbet başlatın!
-                  </EmptyStateMessage>
-                )}
-              </ConversationsList>
-            )}
-          </AnimatePresence>
-        </SidebarSection>
+                    />
+                  ))}
+                </ConversationsList>
+              )}
+            </AnimatePresence>
+          </SidebarSection>
+        )}
+        
+        {/* Bugünkü Sohbetler */}
+        {groupedConversations.today.length > 0 && (
+          <SidebarSection>
+            <SectionTitle>
+              <span>Bugün</span>
+            </SectionTitle>
+            <ConversationsList>
+              {groupedConversations.today.map((conversation) => (
+                <ConversationItem 
+                  key={conversation.id}
+                  conversation={conversation}
+                  active={activeConversation === conversation.id}
+                />
+              ))}
+            </ConversationsList>
+          </SidebarSection>
+        )}
+        
+        {/* Dünkü Sohbetler */}
+        {groupedConversations.yesterday.length > 0 && (
+          <SidebarSection>
+            <SectionTitle>
+              <span>Dün</span>
+            </SectionTitle>
+            <ConversationsList>
+              {groupedConversations.yesterday.map((conversation) => (
+                <ConversationItem 
+                  key={conversation.id}
+                  conversation={conversation}
+                  active={activeConversation === conversation.id}
+                />
+              ))}
+            </ConversationsList>
+          </SidebarSection>
+        )}
+        
+        {/* Bu Haftaki Sohbetler */}
+        {groupedConversations.thisWeek.length > 0 && (
+          <SidebarSection>
+            <SectionTitle>
+              <span>Son 7 Gün</span>
+            </SectionTitle>
+            <ConversationsList>
+              {groupedConversations.thisWeek.map((conversation) => (
+                <ConversationItem 
+                  key={conversation.id}
+                  conversation={conversation}
+                  active={activeConversation === conversation.id}
+                />
+              ))}
+            </ConversationsList>
+          </SidebarSection>
+        )}
+        
+        {/* Daha Eski Sohbetler */}
+        {groupedConversations.older.length > 0 && (
+          <SidebarSection>
+            <SectionTitle>
+              <span>Daha Eski</span>
+            </SectionTitle>
+            <ConversationsList>
+              {groupedConversations.older.map((conversation) => (
+                <ConversationItem 
+                  key={conversation.id}
+                  conversation={conversation}
+                  active={activeConversation === conversation.id}
+                />
+              ))}
+            </ConversationsList>
+          </SidebarSection>
+        )}
       </SidebarMiddle>
       
       <SidebarBottom>
         <UserInfo>
-          <UserAvatar>{user ? getInitials(user.name || user.email) : '?'}</UserAvatar>
-          <UserDetails>
-            <UserName>{user ? (user.name || user.email) : 'Misafir'}</UserName>
-            <UserStatus>{user ? 'Aktif' : 'Giriş yapılmadı'}</UserStatus>
-          </UserDetails>
+          <UserAvatar>
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt={user.displayName || user.email} />
+            ) : (
+              getInitials(user?.displayName || user?.email)
+            )}
+          </UserAvatar>
+          <UserName>{user?.displayName || user?.email}</UserName>
         </UserInfo>
-        
-        <OptionsContainer>
-          <IconButton onClick={handleSettings}>
+        <BottomButtons>
+          <BottomButton onClick={handleSettings} title="Ayarlar">
             <FaCog />
-          </IconButton>
-          <IconButton onClick={handleLogout}>
+          </BottomButton>
+          <BottomButton onClick={handleLogout} title="Oturumu Kapat">
             <FaSignOutAlt />
-          </IconButton>
-        </OptionsContainer>
-        
-        <UsageInfo>
-          <FaRegClock size={12} />
-          <div>
-            <div>Bugün kalan istek: {user ? (user.usageLimit || 100) : 0}</div>
-            <ProgressBar>
-              <ProgressFill percentage={user ? ((user.usageLimit || 100) / 100) * 100 : 0} />
-            </ProgressBar>
-          </div>
-        </UsageInfo>
+          </BottomButton>
+        </BottomButtons>
       </SidebarBottom>
       
-      {contextMenu && (
-        <ContextMenu position={contextMenu.position} ref={contextMenuRef}>
-          <ContextMenuItem onClick={() => handleRename(
-            contextMenu.id,
-            conversations.find(c => c.id === contextMenu.id)?.title || 'Yeni Sohbet'
-          )}>
-            <FaEdit /> Yeniden Adlandır
-          </ContextMenuItem>
-          <ContextMenuItem onClick={() => handleArchive(contextMenu.id)}>
-            <FaArchive /> Arşivle
-          </ContextMenuItem>
-          <ContextMenuItem className="danger" onClick={() => handleDelete(contextMenu.id)}>
-            <FaTrash /> Sil
-          </ContextMenuItem>
-        </ContextMenu>
+      {renderContextMenu()}
+      
+      {renaming.id && (
+        <RenameModal>
+          <RenameModalContent>
+            <RenameModalTitle>Sohbeti Yeniden Adlandır</RenameModalTitle>
+            <RenameInput
+              type="text"
+              value={renaming.title}
+              onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}
+              autoFocus
+            />
+            <RenameModalButtons>
+              <RenameModalButton onClick={() => setRenaming({ id: null, title: '' })}>
+                İptal
+              </RenameModalButton>
+              <RenameModalButton primary onClick={submitRename}>
+                Kaydet
+              </RenameModalButton>
+            </RenameModalButtons>
+          </RenameModalContent>
+        </RenameModal>
       )}
     </SidebarContainer>
   );

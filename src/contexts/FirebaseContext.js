@@ -27,7 +27,8 @@ import {
   runTransaction,
   enableIndexedDbPersistence,
   initializeFirestore,
-  persistentLocalCache
+  persistentLocalCache,
+  getFirestore as getExistingFirestore
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase/config';
 
@@ -35,10 +36,19 @@ import firebaseConfig from '../firebase/config';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// Modern cache ile Firestore başlatma
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({})
-});
+// Firestore için tekil instance kontrolü
+let db;
+try {
+  // Önce mevcut bir Firestore instance'ı var mı kontrol edelim
+  db = getExistingFirestore();
+  console.log("Mevcut Firestore instance'ı kullanılıyor.");
+} catch (e) {
+  // Yoksa yeni bir tane oluşturalım
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({})
+  });
+  console.log("Yeni Firestore instance'ı oluşturuldu ve persistentLocalCache etkinleştirildi.");
+}
 
 const googleProvider = new GoogleAuthProvider();
 
