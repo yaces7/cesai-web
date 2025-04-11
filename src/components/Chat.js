@@ -439,10 +439,16 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = 'https://cesai-production.up.railway.app';
+const PROXY_URL = 'https://cors-anywhere.herokuapp.com/';
 
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
-  console.log(`API çağrısı yapılıyor: ${method} ${API_URL}${endpoint}`);
+  const targetUrl = `${API_URL}${endpoint}`;
+  console.log(`API çağrısı yapılıyor: ${method} ${targetUrl}`);
+  
+  // Proxy kullanılacak mı?
+  const useProxy = false; // CORS hatası devam ederse bunu true yapın
+  const fetchUrl = useProxy ? `${PROXY_URL}${targetUrl}` : targetUrl;
   
   try {
     // İstek yapılandırması
@@ -451,9 +457,10 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': window.location.origin
       },
-      mode: 'cors', // CORS hatalarını düzeltmek için no-cors yerine cors kullanıyoruz
+      mode: 'cors', 
       signal: AbortSignal.timeout(timeoutMs)
     };
     
@@ -468,8 +475,8 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
     }
     
     // Doğrudan API'ye istek yap
-    console.log('API isteği yapılıyor:', `${API_URL}${endpoint}`);
-    const response = await fetch(`${API_URL}${endpoint}`, config);
+    console.log('API isteği yapılıyor:', fetchUrl);
+    const response = await fetch(fetchUrl, config);
     
     // Normal yanıt kontrolü
     if (response.ok) {
@@ -1241,17 +1248,24 @@ const Chat = () => {
     try {
       setApiStatus('connecting');
       
-      // Doğrudan API'ye istek yap
-      console.log('API bağlantısını kontrol ediyorum...');
+      // API sağlık kontrolü URL'si  
+      const targetUrl = `${API_URL}/health`;
+      
+      // Proxy kullanılacak mı?
+      const useProxy = true; // CORS hatası devam ederse bunu true yapın
+      const fetchUrl = useProxy ? `${PROXY_URL}${targetUrl}` : targetUrl;
+      
+      console.log('API bağlantısını kontrol ediyorum...', fetchUrl);
       
       try {
-        const healthResponse = await fetch(`${API_URL}/health`, {
+        const healthResponse = await fetch(fetchUrl, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'Origin': window.location.origin
           },
-          mode: 'cors', // CORS hatalarını düzeltmek için no-cors yerine cors kullanıyoruz
+          mode: 'cors',
           signal: AbortSignal.timeout(5000)
         });
         
@@ -1263,7 +1277,7 @@ const Chat = () => {
           throw new Error(`Sunucu yanıt verdi, fakat durum kodu: ${healthResponse.status}`);
         }
       } catch (fetchError) {
-        console.error('Doğrudan API bağlantısı hatası:', fetchError);
+        console.error('API bağlantısı hatası:', fetchError);
         throw fetchError;
       }
     } catch (error) {
