@@ -4,9 +4,10 @@ import { motion } from 'framer-motion';
 import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle, FaWifi, FaExclamationTriangle, FaRegCopy, FaSync, FaRegComment, FaBook } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection, arrayUnion } from 'firebase/firestore';
 import { message } from 'antd';
 import { ReactMarkdown } from 'react-markdown/lib/react-markdown';
+import { auth } from '../firebase';
 
 // Styled Components
 const ChatContainer = styled.div`
@@ -362,58 +363,42 @@ const MessageAnalysis = styled.div`
   border-top: 1px dashed rgba(255, 255, 255, 0.1);
 `;
 
-const ConnectionStatus = styled.div`
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border-radius: 15px;
-  font-size: 0.8rem;
-  color: ${props => props.offline ? '#ff6b6b' : '#4caf50'};
-  background: ${props => props.offline ? 'rgba(255, 107, 107, 0.1)' : 'rgba(76, 175, 80, 0.1)'};
-  border: 1px solid ${props => props.offline ? 'rgba(255, 107, 107, 0.3)' : 'rgba(76, 175, 80, 0.3)'};
-  opacity: ${props => props.visible ? 1 : 0};
-  transition: opacity 0.3s;
-`;
-
-const RetryButton = styled.button`
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  margin-top: 1rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-  
-  &:hover {
-    opacity: 0.9;
-  }
-`;
-
-const ActionButton = styled.button`
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.7rem;
-  padding: 4px 6px;
-  border-radius: 4px;
-  
-  &:hover {
-    background: var(--bg-hover);
-    color: var(--accent-color);
-  }
-`;
+const ConnectionStatus = ({ status, onRetryClick }) => {
+  return (
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      fontSize: '0.8rem',
+      color: status === 'error' ? '#ff6b6b' : status === 'connecting' ? '#ffbb33' : '#4caf50',
+      gap: '5px'
+    }}>
+      {status === 'connected' && <FaWifi />}
+      {status === 'connecting' && <FaSpinner className="spinner" />}
+      {status === 'error' && <FaExclamationTriangle />}
+      
+      <span>
+        {status === 'connected' && 'Bağlı'}
+        {status === 'connecting' && 'Bağlanıyor...'}
+        {status === 'error' && 'Bağlantı hatası'}
+      </span>
+      
+      {status === 'error' && (
+        <button 
+          onClick={onRetryClick}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#8b3dff',
+            cursor: 'pointer',
+            marginLeft: '5px'
+          }}
+        >
+          <FaSync />
+        </button>
+      )}
+    </div>
+  );
+};
 
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -541,16 +526,42 @@ const Chat = () => {
   // API bağlantısını kontrol eden fonksiyon
   const checkApiConnection = async () => {
     try {
+      // API durumunu güncelle
+      setApiStatus('connecting');
+      
+      // API URL'sini ayarla - cesai.app.tc domaini kullan
+      const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://cesai-production.up.railway.app';
+      const healthUrl = `${apiBaseUrl}/health`;
+      
+      console.log('API bağlantısı kontrol ediliyor:', healthUrl);
+      
       const timeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Zaman aşımı')), 5000)
       );
       
-      const fetchPromise = fetch(`${API_URL}/health`);
+      const fetchPromise = fetch(healthUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Origin': window.location.origin
+        },
+        mode: 'cors'
+      });
       
       const response = await Promise.race([fetchPromise, timeout]);
-      return response.ok;
+      
+      if (response.ok) {
+        console.log('API bağlantısı başarılı');
+        setApiStatus('connected');
+        return true;
+      } else {
+        console.error('API bağlantı kontrolü başarısız:', response.status);
+        setApiStatus('error');
+        return false;
+      }
     } catch (error) {
       console.error('API bağlantı kontrolü başarısız:', error);
+      setApiStatus('error');
       return false;
     }
   };
@@ -769,66 +780,82 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
   
-  // API'den yapay zeka yanıtı al
-  const getAIResponse = async (userMessage) => {
+  // Mesaj gönderme fonksiyonu
+  const sendMessage = async (text) => {
     try {
-      // İnternet bağlantısı kontrolü
+      // İnternet bağlantısını kontrol et
       if (!navigator.onLine) {
-        throw new Error('İnternet bağlantısı yok. Lütfen bağlantınızı kontrol edin.');
+        throw new Error('İnternet bağlantınız yok. Lütfen bağlantınızı kontrol edin.');
       }
+
+      // API durumunu güncelle
+      setApiStatus('connecting');
       
       // Firebase kimlik doğrulama token'ını al
       let token = '';
       try {
-        token = await getFirebaseToken(true); // Context'ten gelen fonksiyonu kullan
-        console.log('Firebase token başarıyla alındı');
-      } catch (tokenError) {
-        console.error('Token alınırken hata oluştu:', tokenError);
-        throw new Error('Kimlik doğrulama hatası: ' + tokenError.message);
+        const user = auth.currentUser;
+        if (user) {
+          token = await user.getIdToken(true);
+        } else {
+          throw new Error('Oturum açık değil');
+        }
+      } catch (error) {
+        console.error('Token alınamadı:', error);
+        setApiStatus('error');
+        throw new Error('Kimlik doğrulama başarısız. Lütfen tekrar giriş yapın.');
       }
+
+      // API URL'sini ayarla
+      const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://cesai-production.up.railway.app';
+      console.log('API URL:', apiBaseUrl);
       
-      console.log('API isteği gönderiliyor:', `${API_URL}/api/chat`);
-      
-      // Zaman aşımı kontrolü
+      // İstek için zaman aşımı ayarla (30 saniye)
       const timeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('API yanıt zaman aşımı. Sunucu yanıt vermiyor.')), 30000)
+        setTimeout(() => reject(new Error('API yanıt vermedi, istek zaman aşımına uğradı')), 30000)
       );
       
-      const fetchPromise = fetch(`${API_URL}/api/chat`, {
+      // API isteği yap
+      const fetchPromise = fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Origin': window.location.origin
         },
-        body: JSON.stringify({
-          message: userMessage,
+        body: JSON.stringify({ 
+          message: text,
           conversation_id: currentChatId,
-          preferences: {
-            style: 'casual',
-            detailed: true
-          }
-        })
+          model: 'gpt-3.5-turbo'
+        }),
+        mode: 'cors',
+        credentials: 'include'
       });
       
       const response = await Promise.race([fetchPromise, timeout]);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('API yanıt hatası:', response.status, errorData);
-        throw new Error(`API hatası: ${response.status} - ${errorData.detail || 'Bilinmeyen hata'}`);
+        throw new Error(errorData.message || `API hatası: ${response.status}`);
       }
       
       const data = await response.json();
-      console.log('AI yanıtı alındı:', data);
+      
+      // API durumunu güncelle
+      setApiStatus('connected');
+      
       return {
-        text: data.message || "Üzgünüm, bir yanıt oluşturulamadı.",
-        analysis: data.analysis || "",
-        context: data.context || {},
+        text: data.response || data.message || '',
+        analysis: data.analysis || null,
+        context: data.context || null,
         code_blocks: data.code_blocks || [],
-        security_insights: data.security_insights || ""
+        security_insights: data.security_insights || null,
+        planning: data.planning || null
       };
     } catch (error) {
-      console.error('AI yanıtı alınırken hata oluştu:', error);
+      console.error('Mesaj gönderme hatası:', error);
+      setApiStatus('error');
       throw error;
     }
   };
@@ -903,7 +930,7 @@ const Chat = () => {
         if (messages.length > 0 && messages[messages.length - 1].isUser) {
           try {
             const lastUserMessage = messages[messages.length - 1].text;
-            const aiResponseData = await getAIResponse(lastUserMessage);
+            const aiResponseData = await sendMessage(lastUserMessage);
             
             const aiMessage = {
               text: aiResponseData.text,
@@ -1023,7 +1050,7 @@ const Chat = () => {
       
       // API yanıtını al (yeni ya da mevcut sohbet için)
       if (!initialMessage || currentId) {
-        await getAIResponse(userMessage);
+        await sendMessage(userMessage);
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -1233,15 +1260,22 @@ const Chat = () => {
   
   return (
     <ChatContainer>
+      <CopyNotification className={showCopyNotification ? 'show' : ''}>
+        <FaRegCopy /> Mesaj panoya kopyalandı
+      </CopyNotification>
+      
       <ChatHeader>
         <h1>
-          {isNewChat ? "Yeni Sohbet" : conversation?.title || "Yükleniyor..."}
+          {isNewChat ? "cesai.app.tc" : conversation?.title || "Yükleniyor..."}
         </h1>
-        <ConnectionStatus status={apiStatus} onRetryClick={retryApiConnection} />
+        <ConnectionStatus 
+          status={apiStatus} 
+          onRetryClick={retryApiConnection} 
+        />
       </ChatHeader>
       
       <MessagesContainer 
-        ref={messagesContainerRef} 
+        ref={messagesContainerRef}
         onScroll={handleScroll}
       >
         {isNewChat && messages.length === 0 ? (
