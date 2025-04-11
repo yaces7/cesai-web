@@ -438,7 +438,7 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 };
 
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_URL = 'https://cesai-production.up.railway.app';
 
 // Chat Component
 const Chat = () => {
@@ -580,9 +580,11 @@ const Chat = () => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Origin': window.location.origin
+          'Origin': window.location.origin,
+          'Access-Control-Allow-Origin': '*'
         },
-        mode: 'cors'
+        mode: 'cors',
+        credentials: 'omit'
       });
       
       const response = await Promise.race([fetchPromise, timeout]);
@@ -627,13 +629,22 @@ const Chat = () => {
         // Eğer mesaj sıkıştırılmışsa, çözümle
         if (msg.isCompressed) {
           console.log(`Mesaj #${index} sıkıştırılmış, çözümleniyor...`);
-          const decompressedText = mesajCoz(msg.text);
+          const decompressedText = mesajCoz ? mesajCoz(msg.text) : msg.text;
           return {
             ...msg,
             text: decompressedText,
             _originalCompressed: msg.text // Debug için orijinal sıkıştırılmış metni saklayalım
           };
         }
+
+        // isUser tanımlanmamışsa, sender alanına bakarak düzeltelim
+        if (msg.isUser === undefined && msg.sender) {
+          return {
+            ...msg,
+            isUser: msg.sender === "user"
+          };
+        }
+        
         return msg;
       } catch (error) {
         console.error(`Mesaj #${index} çözümlenirken hata:`, error, msg);
@@ -852,6 +863,22 @@ const Chat = () => {
         setTimeout(() => reject(new Error('API yanıt vermedi, istek zaman aşımına uğradı')), 30000)
       );
       
+      try {
+        // API isteği yapmadan önce CORS kontrol isteği yap
+        const corsCheckPromise = fetch(`${apiBaseUrl}/health`, {
+          method: 'OPTIONS',
+          headers: {
+            'Origin': window.location.origin
+          },
+          mode: 'cors'
+        });
+        
+        await Promise.race([corsCheckPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('CORS kontrolü zaman aşımı')), 3000))]);
+      } catch (corsError) {
+        console.warn('CORS ön kontrolü başarısız:', corsError);
+        // CORS hatası olsa da ana isteği deneyebiliriz
+      }
+      
       // API isteği yap
       const fetchPromise = fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
@@ -859,7 +886,8 @@ const Chat = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
-          'Origin': window.location.origin
+          'Origin': window.location.origin,
+          'Access-Control-Allow-Origin': '*'
         },
         body: JSON.stringify({ 
           message: text,
@@ -867,7 +895,7 @@ const Chat = () => {
           model: 'gpt-3.5-turbo'
         }),
         mode: 'cors',
-        credentials: 'include'
+        credentials: 'omit'  // 'include' yerine 'omit' kullanarak CORS sorunlarını azalt
       });
       
       const response = await Promise.race([fetchPromise, timeout]);
@@ -927,7 +955,10 @@ const Chat = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Origin': window.location.origin,
+          'Access-Control-Allow-Origin': '*'
         },
         body: JSON.stringify({
           message: message,
@@ -936,7 +967,9 @@ const Chat = () => {
           preferences: {
             conversation_id: currentChatId
           }
-        })
+        }),
+        mode: 'cors',
+        credentials: 'omit'
       });
       
       if (!feedbackResponse.ok) {
@@ -1025,7 +1058,7 @@ const Chat = () => {
         setMessages([{
           id: Date.now().toString(),
           text: userMessage,
-          sender: "user",
+          isUser: true,
           timestamp: new Date().toISOString()
         }]);
         
@@ -1048,7 +1081,7 @@ const Chat = () => {
           messages: [{
             id: Date.now().toString(),
             text: userMessage,
-            sender: "user",
+            isUser: true,
             timestamp: timestamp
           }]
         });
@@ -1065,7 +1098,7 @@ const Chat = () => {
         const userMessageObj = {
           id: Date.now().toString(),
           text: userMessage,
-          sender: "user",
+          isUser: true,
           timestamp: new Date().toISOString()
         };
         
@@ -1303,7 +1336,7 @@ const Chat = () => {
       
       <ChatHeader>
         <h1>
-          {isNewChat ? "cesai.app.tc" : conversation?.title || "Yükleniyor..."}
+          {isNewChat ? "Yeni Sohbet" : conversation?.title || "Yükleniyor..."}
         </h1>
         <ConnectionStatus 
           status={apiStatus} 
