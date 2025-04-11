@@ -291,6 +291,79 @@ const RenameModalButton = styled.button`
   }
 `;
 
+const ConversationIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.8rem;
+  color: var(--text-secondary);
+`;
+
+const ContextMenu = styled.div`
+  position: fixed;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  overflow: hidden;
+  min-width: 200px;
+`;
+
+const ContextMenuItem = styled.div`
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: ${props => props.danger ? 'var(--error-color)' : 'var(--text-color)'};
+  
+  &:hover {
+    background-color: var(--bg-hover);
+  }
+  
+  svg {
+    font-size: 14px;
+  }
+`;
+
+const ContextMenuDivider = styled.div`
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+`;
+
+const UserName = styled.div`
+  font-size: 0.9rem;
+  color: var(--text-color);
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0;
+`;
+
+const UserAvatar = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  margin-right: 0.8rem;
+  font-size: 0.9rem;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+`;
+
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
   const [conversationsOpen, setConversationsOpen] = useState(true);
   const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
@@ -397,32 +470,71 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       // Yeni sohbet oluşturma işlemini başlatmadan önce kontrol et
       console.log('Yeni sohbet oluşturuluyor...');
       
+      // createConversation fonksiyonunu çağırarak yeni sohbet oluştur
       const chatId = await createConversation('Yeni Sohbet');
-      console.log(`Yeni sohbet oluşturuldu, ID: ${chatId}`);
       
-      // Yönlendirme, ID'yi ayarlama ve UI güncellemesi için bir zaman aralığı bırak
+      if (!chatId) {
+        throw new Error('Sohbet oluşturuldu, ancak ID alınamadı');
+      }
+      
+      console.log(`Yeni sohbet başarıyla oluşturuldu, ID: ${chatId}`);
+      
+      // Önce dropdown'ı kapat
       setShowNewChatDropdown(false);
+      
+      // Aktif sohbeti güncelle
       setActiveConversation(chatId);
       
-      // Önce state güncellensin, sonra navigasyon yapılsın
+      // Önce sohbetin veritabanında tam olarak oluşması için biraz bekle
       setTimeout(() => {
-        navigate(`/chat/${chatId}`);
-        
-        // Bir süre sonra sohbet öğesini bul ve görünüme getir
-        setTimeout(() => {
-          const chatElement = document.getElementById(`chat-${chatId}`);
-          if (chatElement) {
-            chatElement.scrollIntoView({ behavior: 'smooth' });
-            // Görsel bir vurgu ekle
-            chatElement.classList.add('highlight');
-            setTimeout(() => {
-              chatElement.classList.remove('highlight');
-            }, 1000);
-          } else {
-            console.warn(`Sohbet öğesi bulunamadı: chat-${chatId}`);
-          }
-        }, 300);
-      }, 100);
+        try {
+          // Sohbet sayfasına yönlendir
+          navigate(`/chat/${chatId}`);
+          console.log(`${chatId} ID'li sohbete yönlendirildi`);
+          
+          // Kısa bir süre sonra UI elemanlarını güncelle (DOM güncellemesi için)
+          setTimeout(() => {
+            try {
+              // DOM'da sohbet öğesini bul
+              const chatElement = document.getElementById(`chat-${chatId}`);
+              
+              if (chatElement) {
+                // Sohbet öğesini görünür alana getir
+                chatElement.scrollIntoView({ behavior: 'smooth' });
+                
+                // Vurgu ekle
+                chatElement.classList.add('highlight');
+                
+                // 1 saniye sonra vurguyu kaldır
+                setTimeout(() => {
+                  chatElement.classList.remove('highlight');
+                }, 1000);
+                
+                console.log(`Sohbet öğesi bulundu ve vurgulandı: chat-${chatId}`);
+              } else {
+                console.warn(`Sohbet öğesi DOM'da bulunamadı: chat-${chatId}`);
+                
+                // İkinci bir deneme yap (sayfanın DOM'unun güncellenmesi için biraz daha bekle)
+                setTimeout(() => {
+                  const retryElement = document.getElementById(`chat-${chatId}`);
+                  if (retryElement) {
+                    retryElement.scrollIntoView({ behavior: 'smooth' });
+                    console.log('Sohbet öğesi ikinci denemede bulundu');
+                  } else {
+                    console.warn('Sohbet öğesi ikinci denemede de bulunamadı');
+                  }
+                }, 1000);
+              }
+            } catch (domError) {
+              console.error('DOM işlemleri sırasında hata:', domError);
+            }
+          }, 500);
+        } catch (navError) {
+          console.error('Yönlendirme sırasında hata:', navError);
+          // Yönlendirme başarısız olduysa, sayfa yeniden yüklemeyi dene
+          window.location.href = `/chat/${chatId}`;
+        }
+      }, 300);
       
     } catch (error) {
       console.error('Sohbet oluşturulurken hata oluştu:', error);
@@ -441,18 +553,59 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     console.log(`Sohbet tıklandı: ${id}`);
     
     try {
+      // Eski ve yeni ID aynıysa sadece UI'ı güncelle
+      if (activeConversation === id) {
+        console.log(`Zaten ${id} ID'li sohbetteyiz, sayfayı yenilemeden UI güncelleniyor`);
+        
+        // Sohbet öğesini vurgula
+        const chatElement = document.getElementById(`chat-${id}`);
+        if (chatElement) {
+          chatElement.classList.add('highlight');
+          setTimeout(() => {
+            chatElement.classList.remove('highlight');
+          }, 500);
+        }
+        
+        return;
+      }
+      
       // Aktif sohbeti güncelle
       setActiveConversation(id);
       
-      // Sohbet sayfasına yönlendir
-      navigate(`/chat/${id}`);
-      
-      // Mobil görünümde sidebar'ı kapat
-      if (window.innerWidth <= 768) {
-        setShowSidebar(false);
-      }
+      // Yönlendirme yapmadan önce biraz bekle - React state güncellemesi için
+      setTimeout(() => {
+        // Yönlendirme işlemini hata kontrolüyle yap
+        try {
+          console.log(`${id} ID'li sohbete yönlendiriliyor...`);
+          navigate(`/chat/${id}`);
+          
+          // Mobil görünümde sidebar'ı kapat
+          if (window.innerWidth <= 768) {
+            setShowSidebar(false);
+          }
+          
+          // Sohbet öğesini vurgula (yönlendirme sonrası)
+          setTimeout(() => {
+            const chatElement = document.getElementById(`chat-${id}`);
+            if (chatElement) {
+              chatElement.classList.add('highlight');
+              setTimeout(() => {
+                chatElement.classList.remove('highlight');
+              }, 500);
+            }
+          }, 500);
+        } catch (navError) {
+          console.error('Yönlendirme sırasında hata:', navError);
+          
+          // Son çare olarak window.location ile yönlendir
+          window.location.href = `/chat/${id}`;
+        }
+      }, 50);
     } catch (error) {
       console.error('Sohbet yönlendirmesi yapılırken hata oluştu:', error);
+      
+      // Herhangi bir hata durumunda son çare olarak window.location ile yönlendir
+      window.location.href = `/chat/${id}`;
     }
   };
   
@@ -640,14 +793,34 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     const handleClick = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      
+      // Conversation ID kontrolü
+      if (!conversation || !conversation.id) {
+        console.error('Geçersiz konversasyon ID\'si:', conversation);
+        return;
+      }
+      
+      // ID'yi doğrudan ileterek tıklama işleyicisini çağır
+      console.log(`Sohbet öğesine tıklandı: ${conversation.id}`);
       onClick(conversation.id);
     };
     
     const handleContextMenu = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      
+      if (!conversation) {
+        console.error('Geçersiz konversasyon:', conversation);
+        return;
+      }
+      
       onContextMenu(e, conversation);
     };
+    
+    if (!conversation || !conversation.id) {
+      console.error('Render edilemeyen konversasyon:', conversation);
+      return null;
+    }
     
     return (
       <ConversationItemWrapper
@@ -664,7 +837,7 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
         </ConversationIcon>
         <ConversationDetails>
           <ConversationTitle>
-            {conversation.title}
+            {conversation.title || 'İsimsiz Sohbet'}
           </ConversationTitle>
           <ConversationTime>
             {formatDate(conversation.updatedAt || conversation.createdAt)}

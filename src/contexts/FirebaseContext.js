@@ -82,9 +82,29 @@ const mesajSikistir = (text) => {
 const mesajCoz = (compressed) => {
   if (!compressed) return '';
   
+  // Metni kontrol et
+  if (typeof compressed !== 'string') {
+    console.error('Geçersiz sıkıştırılmış metin:', compressed);
+    return String(compressed) || '';
+  }
+  
   try {
+    // Base64 kontrolü yap
+    const isBase64 = /^[A-Za-z0-9+/=]+$/.test(compressed);
+    
+    if (!isBase64) {
+      console.warn('Base64 formatında olmayan metin:', compressed);
+      return compressed; // Base64 değilse, orijinal metni döndür
+    }
+    
     // Base64 çözümleme
-    let text = decodeURIComponent(escape(atob(compressed)));
+    let text;
+    try {
+      text = decodeURIComponent(escape(atob(compressed)));
+    } catch (decodeError) {
+      console.warn('Base64 çözümleme hatası:', decodeError);
+      return compressed; // Çözümlenemezse orijinal metni döndür
+    }
     
     // Türkçe kelimeler için genel sesli harf ekleme kuralları
     // Gerçek uygulamada daha karmaşık bir NLP algoritması kullanılabilir
@@ -112,10 +132,11 @@ const mesajCoz = (compressed) => {
     }
     
     console.log(`Mesaj çözümleme: ${compressed.length} karakterden ${decompressed.length} karaktere genişletildi.`);
-    return decompressed;
+    return decompressed || compressed; // Eğer sonuç boşsa orijinal metni döndür
   } catch (error) {
     console.error('Mesaj çözümleme hatası:', error);
-    return compressed; // Hata durumunda sıkıştırılmış metni döndür
+    // Herhangi bir hata durumunda orijinal metni döndür
+    return compressed || '';
   }
 };
 
@@ -446,12 +467,22 @@ export const FirebaseProvider = ({ children }) => {
     if (!user) throw new Error('Kullanıcı giriş yapmamış');
     
     try {
+      console.log("Yeni sohbet oluşturuluyor...");
+      
+      // Varsayılan ilk mesaj
+      const welcomeMessage = 'Merhaba! Size nasıl yardımcı olabilirim?';
+      
+      // Mesajı sıkıştır
+      const compressedText = mesajSikistir(welcomeMessage);
+      
       const conversationsCol = collection(db, 'conversations');
       const newConversation = {
         title,
         userId: user.uid,
         messages: [{
-          text: 'Merhaba! Size nasıl yardımcı olabilirim?',
+          text: compressedText,
+          originalLength: welcomeMessage.length,
+          isCompressed: true,
           isUser: false,
           timestamp: new Date().toISOString()
         }],
@@ -461,7 +492,17 @@ export const FirebaseProvider = ({ children }) => {
         pinned: false
       };
       
+      console.log("Oluşturulacak sohbet verisi:", JSON.stringify(newConversation));
+      
       const docRef = await addDoc(conversationsCol, newConversation);
+      console.log(`Sohbet başarıyla oluşturuldu, ID: ${docRef.id}`);
+      
+      // Sohbetin veritabanında olduğunu doğrula
+      const docSnap = await getDoc(doc(db, 'conversations', docRef.id));
+      if (!docSnap.exists()) {
+        throw new Error('Sohbet oluşturuldu ancak hemen erişilemedi');
+      }
+      
       return docRef.id;
     } catch (error) {
       console.error("Sohbet oluşturma hatası:", error);

@@ -385,17 +385,45 @@ const Chat = () => {
   
   // Sıkıştırılmış mesajları çözümleme
   const processMessages = (messages) => {
-    if (!messages || !Array.isArray(messages)) return [];
+    if (!messages || !Array.isArray(messages)) {
+      console.error('Geçersiz mesaj dizisi:', messages);
+      return [];
+    }
     
-    return messages.map(msg => {
-      // Eğer mesaj sıkıştırılmışsa, çözümle
-      if (msg.isCompressed) {
+    console.log(`${messages.length} mesaj çözümleniyor...`);
+    
+    return messages.map((msg, index) => {
+      if (!msg) {
+        console.error(`Geçersiz mesaj #${index}:`, msg);
         return {
-          ...msg,
-          text: mesajCoz(msg.text)
+          text: 'Geçersiz mesaj',
+          isUser: false,
+          timestamp: new Date().toISOString(),
+          error: true
         };
       }
-      return msg;
+      
+      try {
+        // Eğer mesaj sıkıştırılmışsa, çözümle
+        if (msg.isCompressed) {
+          console.log(`Mesaj #${index} sıkıştırılmış, çözümleniyor...`);
+          const decompressedText = mesajCoz(msg.text);
+          return {
+            ...msg,
+            text: decompressedText,
+            _originalCompressed: msg.text // Debug için orijinal sıkıştırılmış metni saklayalım
+          };
+        }
+        return msg;
+      } catch (error) {
+        console.error(`Mesaj #${index} çözümlenirken hata:`, error, msg);
+        // Hata durumunda orijinal mesajı döndür
+        return {
+          ...msg,
+          text: msg.text || 'Mesaj çözümlenirken hata oluştu',
+          _processingError: true
+        };
+      }
     });
   };
   
@@ -418,6 +446,7 @@ const Chat = () => {
     const fetchConversation = async () => {
       try {
         const conversationRef = doc(db, 'conversations', chatId);
+        console.log(`Veri çekiliyor: ${conversationRef.path}`);
         
         // Önce bir kere veriyi çekelim, sonra dinlemeye başlayalım
         const docSnap = await getDoc(conversationRef);
@@ -434,24 +463,62 @@ const Chat = () => {
           ...docSnap.data()
         };
         
+        console.log('Çekilen ham veri:', conversationData);
+        
+        // Temel veri kontrolleri
+        if (!conversationData.userId) {
+          console.error('Sohbette userId alanı eksik:', conversationData);
+          setError('Sohbet verisi eksik veya bozuk (userId eksik)');
+          setLoadingConversation(false);
+          return;
+        }
+        
         // Kullanıcıya ait sohbet mi kontrol et
         if (conversationData.userId !== user.uid) {
-          console.error(`Sohbet ID'si ${chatId} bu kullanıcıya ait değil.`);
+          console.error(`Sohbet ID'si ${chatId} bu kullanıcıya ait değil. Beklenen: ${user.uid}, Bulunan: ${conversationData.userId}`);
           setNotFound(true);
           setLoadingConversation(false);
           return;
         }
         
+        // Mesajlar dizisi kontrolü
+        if (!conversationData.messages || !Array.isArray(conversationData.messages)) {
+          console.error('Sohbette mesajlar dizisi eksik veya geçersiz:', conversationData);
+          
+          // Mesajlar yoksa oluştur
+          conversationData.messages = [{
+            text: 'Hoş geldiniz! Yeni bir sohbete başladınız.',
+            isUser: false,
+            timestamp: new Date().toISOString()
+          }];
+          
+          // Firestore'da mesajları güncelle
+          try {
+            await updateDoc(conversationRef, {
+              messages: conversationData.messages,
+              updatedAt: new Date().toISOString()
+            });
+            console.log('Eksik mesajlar dizisi oluşturuldu ve kaydedildi');
+          } catch (updateError) {
+            console.error('Mesajlar dizisi oluşturulurken hata:', updateError);
+          }
+        }
+        
         console.log(`Sohbet verisi başarıyla çekildi:`, conversationData);
         setConversation(conversationData);
+        
         // Sıkıştırılmış mesajları çözümle
-        setMessages(processMessages(conversationData.messages || []));
+        const processedMessages = processMessages(conversationData.messages || []);
+        console.log('İşlenmiş mesajlar:', processedMessages);
+        
+        setMessages(processedMessages);
         setNotFound(false);
         setLoadingConversation(false);
         
         // Şimdi gerçek zamanlı dinlemeye başlayalım
         const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
           if (!docSnap.exists()) {
+            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${chatId} bulunamadı.`);
             setNotFound(true);
             return;
           }
@@ -463,14 +530,23 @@ const Chat = () => {
           
           // Kullanıcıya ait sohbet mi kontrol et
           if (updatedConversationData.userId !== user.uid) {
+            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${chatId} bu kullanıcıya ait değil.`);
             setNotFound(true);
             return;
           }
           
           console.log('Sohbet gerçek zamanlı güncellendi:', updatedConversationData);
           setConversation(updatedConversationData);
+          
+          // Mesajlar kontrolü
+          if (!updatedConversationData.messages || !Array.isArray(updatedConversationData.messages)) {
+            console.error('Gerçek zamanlı güncelleme: Mesajlar dizisi geçersiz:', updatedConversationData);
+            return;
+          }
+          
           // Sıkıştırılmış mesajları çözümle
-          setMessages(processMessages(updatedConversationData.messages || []));
+          const processedMessages = processMessages(updatedConversationData.messages || []);
+          setMessages(processedMessages);
           setNotFound(false);
         }, (err) => {
           console.error('Sohbet dinlenirken hata oluştu:', err);
@@ -482,7 +558,7 @@ const Chat = () => {
       } catch (error) {
         console.error('Sohbet yüklenirken hata oluştu:', error);
         setError('Firebase erişim hatası: ' + error.message);
-        setNotFound(true);
+        setNotFound(false); // Sohbet bulunamadı değil, bir hata oluştu
         setLoadingConversation(false);
       }
     };
