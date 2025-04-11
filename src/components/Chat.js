@@ -435,6 +435,8 @@ const Chat = () => {
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
+  const [isScrollingUp, setIsScrollingUp] = useState(false);
+  const [apiStatus, setApiStatus] = useState('connecting');
   const navigate = useNavigate();
   
   const messagesContainerRef = useRef(null);
@@ -447,6 +449,72 @@ const Chat = () => {
   
   // Kullanılacak chatId, URL'den gelen veya useParams'tan gelen
   const currentChatId = urlChatId || chatId;
+  
+  // Boş sohbet durumu için kontrol
+  const isNewChat = !currentChatId || currentChatId === 'new';
+  
+  // Mesaj container scroll işlemi için
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    
+    // Scroll durumunu güncelle
+    setShowScrollButton(!isNearBottom);
+    setIsScrollingUp(scrollTop < (messagesContainerRef.current._lastScrollTop || 0));
+    
+    // Son scroll pozisyonunu kaydet
+    messagesContainerRef.current._lastScrollTop = scrollTop;
+  };
+  
+  // Sohbeti yükleme fonksiyonu
+  const fetchConversation = async (id = currentChatId) => {
+    if (!id || id === 'new' || !user) return;
+    
+    try {
+      setLoadingConversation(true);
+      
+      // Firestore'dan sohbet verisini al
+      const conversationRef = doc(db, "conversations", id);
+      
+      // Realtime güncelleme için onSnapshot kullanılıyor
+      const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setConversation(data);
+          
+          // Mesajları işle
+          if (data.messages && Array.isArray(data.messages)) {
+            setMessages(data.messages);
+            
+            // Yeni mesaj geldiğinde otomatik kaydırma
+            setTimeout(() => {
+              scrollToBottom();
+            }, 100);
+          } else {
+            setMessages([]);
+          }
+          
+          setLoadingConversation(false);
+        } else {
+          console.error(`Sohbet bulunamadı: ${id}`);
+          setError("Sohbet bulunamadı");
+          setLoadingConversation(false);
+        }
+      }, (error) => {
+        console.error("Sohbet yüklenirken hata:", error);
+        setError(`Sohbet yüklenirken hata oluştu: ${error.message}`);
+        setLoadingConversation(false);
+      });
+      
+      return unsubscribe;
+    } catch (error) {
+      console.error("Sohbet yükleme hatası:", error);
+      setError(`Sohbet yüklenirken bir hata oluştu: ${error.message}`);
+      setLoadingConversation(false);
+    }
+  };
   
   // İnternet bağlantısı durumunu izle
   useEffect(() => {
