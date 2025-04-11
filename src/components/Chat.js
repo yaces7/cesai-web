@@ -554,18 +554,18 @@ const Chat = () => {
         
         // Önce bir kere veriyi çekelim, sonra dinlemeye başlayalım
         const docSnap = await getDoc(conversationRef);
-        
-        if (!docSnap.exists()) {
+          
+          if (!docSnap.exists()) {
           console.error(`Sohbet ID'si ${currentChatId} bulunamadı.`);
-          setNotFound(true);
+            setNotFound(true);
           setLoadingConversation(false);
-          return;
-        }
-        
-        const conversationData = {
-          id: docSnap.id,
-          ...docSnap.data()
-        };
+            return;
+          }
+          
+          const conversationData = {
+            id: docSnap.id,
+            ...docSnap.data()
+          };
         
         console.log('Çekilen ham veri:', conversationData);
         
@@ -576,15 +576,15 @@ const Chat = () => {
           setLoadingConversation(false);
           return;
         }
-        
-        // Kullanıcıya ait sohbet mi kontrol et
-        if (conversationData.userId !== user.uid) {
+          
+          // Kullanıcıya ait sohbet mi kontrol et
+          if (conversationData.userId !== user.uid) {
           console.error(`Sohbet ID'si ${currentChatId} bu kullanıcıya ait değil. Beklenen: ${user.uid}, Bulunan: ${conversationData.userId}`);
-          setNotFound(true);
+            setNotFound(true);
           setLoadingConversation(false);
-          return;
-        }
-        
+            return;
+          }
+          
         // Mesajlar dizisi kontrolü
         if (!conversationData.messages || !Array.isArray(conversationData.messages)) {
           console.error('Sohbette mesajlar dizisi eksik veya geçersiz:', conversationData);
@@ -609,7 +609,7 @@ const Chat = () => {
         }
         
         console.log(`Sohbet verisi başarıyla çekildi:`, conversationData);
-        setConversation(conversationData);
+          setConversation(conversationData);
         
         // Sıkıştırılmış mesajları çözümle
         const processedMessages = processMessages(conversationData.messages || []);
@@ -884,12 +884,12 @@ const Chat = () => {
         console.log("Yeni sohbet oluşturuluyor ve mesaj gönderiliyor...");
         
         // Kullanıcı mesajını oluştur
-        const userMessage = {
+    const userMessage = {
           text: messageToSend,
-          isUser: true,
-          timestamp: new Date().toISOString()
-        };
-        
+      isUser: true,
+      timestamp: new Date().toISOString()
+    };
+    
         // Geçici mesaj listesine ekle
         setMessages([userMessage]);
         
@@ -969,20 +969,20 @@ const Chat = () => {
       try {
         // Firestore'a kullanıcı mesajını ekle
         const conversationRef = doc(db, 'conversations', currentChatId);
-        await updateDoc(conversationRef, {
+      await updateDoc(conversationRef, {
           messages: [...existingMessages, userMessage],
-          updatedAt: new Date().toISOString()
-        });
-        
-        // API kullanım sınırlarını kontrol et
-        await updateApiUsage(user.uid);
-        
+        updatedAt: new Date().toISOString()
+      });
+      
+      // API kullanım sınırlarını kontrol et
+      await updateApiUsage(user.uid);
+      
         // Yapay zeka cevabı oluştur
         try {
           // Yükleme göstergesi için durum mesajı
           setMessages([...existingMessages, userMessage, {
             text: "Yanıt oluşturuluyor...",
-            isUser: false,
+          isUser: false,
             timestamp: new Date().toISOString(),
             _loading: true
           }]);
@@ -1001,11 +1001,11 @@ const Chat = () => {
           
           // Firestore'u güncelle
           const finalMessages = [...existingMessages, userMessage, aiMessage];
-          await updateDoc(conversationRef, {
-            messages: finalMessages,
-            updatedAt: new Date().toISOString()
-          });
-          
+        await updateDoc(conversationRef, {
+          messages: finalMessages,
+          updatedAt: new Date().toISOString()
+        });
+        
           // UI'ı güncelle
           setMessages(finalMessages);
           
@@ -1015,17 +1015,17 @@ const Chat = () => {
           // Varsayılan AI yanıtı
           const aiResponse = {
             text: `Üzgünüm, şu anda yanıt oluşturamıyorum. Teknik bir sorun oluştu.`,
-            isUser: false,
+        isUser: false,
             timestamp: new Date().toISOString(),
             error: true
-          };
-          
+      };
+      
           const finalMessages = [...existingMessages, userMessage, aiResponse];
-          
-          await updateDoc(conversationRef, {
+      
+        await updateDoc(conversationRef, {
             messages: finalMessages,
-            updatedAt: new Date().toISOString()
-          });
+          updatedAt: new Date().toISOString()
+        });
           
           setMessages(finalMessages);
         }
@@ -1228,8 +1228,8 @@ const Chat = () => {
     );
   }
   
-  return (
-    <ChatContainer>
+    return (
+      <ChatContainer>
       {/* Kopyala bildirimi */}
       <CopyNotification className={showCopyNotification ? 'show' : ''}>
         <FaRegCopy /> Mesaj panoya kopyalandı
