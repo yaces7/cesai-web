@@ -440,6 +440,109 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = 'https://cesai-production.up.railway.app';
 
+// API istekleri için yardımcı fonksiyon
+const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
+  console.log(`API çağrısı yapılıyor: ${method} ${API_URL}${endpoint}`);
+  
+  // Zaman aşımı kontrolü için controller
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+    console.log(`API çağrısı zaman aşımına uğradı: ${method} ${API_URL}${endpoint}`);
+  }, timeoutMs);
+  
+  try {
+    // İstek yapılandırması
+    const config = {
+      method,
+      headers: {
+        'Accept': 'application/json',
+        'Origin': window.location.origin
+      },
+      mode: 'cors',
+      credentials: 'omit',
+      signal: controller.signal
+    };
+    
+    // POST, PUT gibi metotlar için içerik ekle
+    if (data) {
+      config.headers['Content-Type'] = 'application/json';
+      config.body = JSON.stringify(data);
+    }
+    
+    // Token varsa ekle
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // İsteği gönder
+    const response = await fetch(`${API_URL}${endpoint}`, config);
+    
+    // Zaman aşımı kontrolünü temizle
+    clearTimeout(timeoutId);
+    
+    // Yanıtı kontrol et ve döndür
+    if (response.ok) {
+      if (method === 'GET' || method === 'POST') {
+        try {
+          const data = await response.json();
+          return { success: true, data };
+        } catch (e) {
+          return { success: true }; // JSON içeriği olmayabilir
+        }
+      }
+      return { success: true };
+    } else {
+      // Hata yanıtını JSON olarak almaya çalış
+      try {
+        const errorData = await response.json();
+        return { 
+          success: false, 
+          status: response.status, 
+          message: errorData.message || `API Hatası: ${response.status}`,
+          data: errorData
+        };
+      } catch (e) {
+        // JSON olarak işlenemezse sadece durum kodu ile hata döndür
+        return { 
+          success: false, 
+          status: response.status, 
+          message: `API Hatası: ${response.status}`
+        };
+      }
+    }
+  } catch (error) {
+    // Zaman aşımı kontrolünü temizle
+    clearTimeout(timeoutId);
+    
+    // Hata nesnesi döndür
+    return { 
+      success: false, 
+      message: error.name === 'AbortError' 
+        ? 'İstek zaman aşımına uğradı'
+        : `API İsteği Hatası: ${error.message}`,
+      error
+    };
+  }
+};
+
+// API bağlantısını kontrol eden fonksiyon
+const checkApiConnection = async () => {
+  setApiStatus('connecting');
+  
+  const result = await callApi('/health', 'GET', null, null, 5000);
+  
+  if (result.success) {
+    console.log('API bağlantısı başarılı');
+    setApiStatus('connected');
+    return true;
+  } else {
+    console.error('API bağlantı kontrolü başarısız:', result.message);
+    setApiStatus('error');
+    return false;
+  }
+};
+
 // Chat Component
 const Chat = () => {
   const { chatId } = useParams();
@@ -591,48 +694,60 @@ const Chat = () => {
     };
   }, []);
   
-  // API bağlantısını kontrol eden fonksiyon
-  const checkApiConnection = async () => {
-    try {
-      // API durumunu güncelle
-      setApiStatus('connecting');
-      
-      // API URL'sini ayarla
-      const apiBaseUrl = 'https://cesai-production.up.railway.app';
-      const healthUrl = `${apiBaseUrl}/health`;
-      
-      console.log('API bağlantısı kontrol ediliyor:', healthUrl);
-      
-      const timeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Zaman aşımı')), 5000)
-      );
-      
-      const fetchPromise = fetch(healthUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Origin': window.location.origin
-        },
-        mode: 'cors',
-        credentials: 'omit'
-      });
-      
-      const response = await Promise.race([fetchPromise, timeout]);
-      
-      if (response.ok) {
-        console.log('API bağlantısı başarılı');
-        setApiStatus('connected');
-        return true;
-      } else {
-        console.error('API bağlantı kontrolü başarısız:', response.status);
-        setApiStatus('error');
-        return false;
+  // İnternet bağlantısı durumunu izle
+  useEffect(() => {
+    let interval;
+    
+    // Başlangıçta bir kez çalıştır
+    const checkInitialConnection = async () => {
+      await checkApiConnection();
+    };
+    
+    checkInitialConnection();
+    
+    // Periyodik kontrol için zamanlayıcı oluştur
+    interval = setInterval(() => {
+      // Sadece hata durumunda tekrar kontrol et
+      if (apiStatus === 'error') {
+        checkApiConnection();
       }
-    } catch (error) {
-      console.error('API bağlantı kontrolü başarısız:', error);
-      setApiStatus('error');
-      return false;
+    }, 30000);
+    
+    // Cleanup yaparken zamanlayıcıyı temizle
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, []); // Boş dependency array ile sadece bir kez çalıştır
+  
+  // Mesajlar değiştiğinde aşağı kaydır
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+  
+  // Kaydırma pozisyonunu kontrol et
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!messagesContainerRef.current) return;
+      
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
+      setShowScrollButton(isScrolledUp);
+    };
+    
+    const messagesContainer = messagesContainerRef.current;
+    if (messagesContainer) {
+      messagesContainer.addEventListener('scroll', handleScroll);
     }
+    
+    return () => {
+      if (messagesContainer) {
+        messagesContainer.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
+  
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
   
   // Sıkıştırılmış mesajları çözümleme
@@ -688,52 +803,6 @@ const Chat = () => {
     });
   };
   
-  // İnternet bağlantısı durumunu izle
-  useEffect(() => {
-    // Uygulama başladığında API bağlantısını kontrol et
-    checkApiConnection();
-    
-    // 30 saniyede bir API bağlantı kontrolü yap
-    const interval = setInterval(() => {
-      if (apiStatus === 'error') {
-        checkApiConnection();
-      }
-    }, 30000);
-    
-    return () => clearInterval(interval);
-  }, [apiStatus]);  // apiStatus değişince yeniden çalıştır
-  
-  // Mesajlar değiştiğinde aşağı kaydır
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-  
-  // Kaydırma pozisyonunu kontrol et
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!messagesContainerRef.current) return;
-      
-      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
-      setShowScrollButton(isScrolledUp);
-    };
-    
-    const messagesContainer = messagesContainerRef.current;
-    if (messagesContainer) {
-      messagesContainer.addEventListener('scroll', handleScroll);
-    }
-    
-    return () => {
-      if (messagesContainer) {
-        messagesContainer.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, []);
-  
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-  
   // Mesaj gönderme fonksiyonu
   const sendMessage = async (text) => {
     try {
@@ -760,64 +829,24 @@ const Chat = () => {
         throw new Error('Kimlik doğrulama başarısız. Lütfen tekrar giriş yapın.');
       }
 
-      // API URL'sini ayarla
-      const apiBaseUrl = 'https://cesai-production.up.railway.app';
-      console.log('API URL:', apiBaseUrl);
+      console.log('Mesaj gönderiliyor...');
       
-      // İstek için zaman aşımı ayarla (30 saniye)
-      const timeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('API yanıt vermedi, istek zaman aşımına uğradı')), 30000)
-      );
+      // callApi yardımcı fonksiyonunu kullan
+      const result = await callApi('/chat', 'POST', {
+        message: text,
+        conversation_id: currentChatId,
+        model: 'gpt-3.5-turbo'
+      }, token, 30000);
       
-      try {
-        // CORS ön kontrolü
-        console.log("CORS ön kontrolü yapılıyor...");
-        await fetch(`${apiBaseUrl}/health`, {
-          method: 'OPTIONS',
-          headers: {
-            'Origin': window.location.origin,
-            'Access-Control-Request-Method': 'POST',
-            'Access-Control-Request-Headers': 'Content-Type, Authorization',
-          },
-          mode: 'cors',
-          credentials: 'omit'
-        });
-      } catch (corsError) {
-        console.warn('CORS ön kontrolü başarısız:', corsError);
-        // CORS hatası olsa da devam edebiliriz
+      if (!result.success) {
+        setApiStatus('error');
+        throw new Error(result.message || 'API yanıt vermedi');
       }
-      
-      // API isteği yap
-      console.log("API isteği gönderiliyor:", `${apiBaseUrl}/chat`);
-      const fetchPromise = fetch(`${apiBaseUrl}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-          'Origin': window.location.origin
-        },
-        body: JSON.stringify({ 
-          message: text,
-          conversation_id: currentChatId,
-          model: 'gpt-3.5-turbo'
-        }),
-        mode: 'cors',
-        credentials: 'omit'
-      });
-      
-      const response = await Promise.race([fetchPromise, timeout]);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `API hatası: ${response.status}`);
-      }
-      
-      const data = await response.json();
       
       // API durumunu güncelle
       setApiStatus('connected');
       
+      const data = result.data;
       return {
         text: data.response || data.message || '',
         analysis: data.analysis || null,
@@ -858,30 +887,18 @@ const Chat = () => {
       
       console.log('Geri bildirim gönderiliyor', { messageId, score });
       
-      // Geri bildirimi API'ye gönder
-      const feedbackResponse = await fetch(`${API_URL}/api/learn`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-          'Origin': window.location.origin
-        },
-        body: JSON.stringify({
-          message: message,
-          response: response,
-          feedback_score: score,
-          preferences: {
-            conversation_id: currentChatId
-          }
-        }),
-        mode: 'cors',
-        credentials: 'omit'
-      });
+      // callApi yardımcı fonksiyonunu kullan
+      const result = await callApi('/api/learn', 'POST', {
+        message: message,
+        response: response,
+        feedback_score: score,
+        preferences: {
+          conversation_id: currentChatId
+        }
+      }, token, 10000);
       
-      if (!feedbackResponse.ok) {
-        const errorData = await feedbackResponse.json().catch(() => ({}));
-        console.error('Geri bildirim gönderilirken API hatası:', feedbackResponse.status, errorData);
+      if (!result.success) {
+        console.error('Geri bildirim gönderilirken API hatası:', result.message, result.status);
       } else {
         console.log('Geri bildirim başarıyla gönderildi');
       }
