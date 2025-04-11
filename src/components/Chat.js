@@ -440,9 +440,27 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = 'https://cesai-production.up.railway.app';
 
+// Proxy endpoint, CORS hatalarını aşmak için kullanılır
+// Not: Bu URL'ler gerçek projelerde değiştirilmelidir
+const CORS_PROXIES = [
+  'https://cors-anywhere.herokuapp.com/',
+  'https://api.allorigins.win/raw?url='
+];
+
+// Proxy ile URL oluşturma
+const getProxiedUrl = (url) => {
+  // Rastgele bir proxy seç
+  const proxy = CORS_PROXIES[0];
+  return proxy + encodeURIComponent(url);
+};
+
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
   console.log(`API çağrısı yapılıyor: ${method} ${API_URL}${endpoint}`);
+  
+  // Direk ve proxy URL'leri hazırla
+  const directUrl = `${API_URL}${endpoint}`;
+  const proxiedUrl = getProxiedUrl(directUrl);
   
   try {
     // İstek yapılandırması
@@ -450,10 +468,8 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       method,
       headers: {
         'Accept': 'application/json',
-        'Origin': window.location.origin,
         'X-Requested-With': 'XMLHttpRequest'
       },
-      mode: 'cors',
       signal: AbortSignal.timeout(timeoutMs)
     };
     
@@ -468,8 +484,29 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     
-    // İsteği gönder
-    const response = await fetch(`${API_URL}${endpoint}`, config);
+    console.log('Proxy URL ile deneniyor:', proxiedUrl);
+    
+    // Önce proxy ile dene
+    try {
+      const response = await fetch(proxiedUrl, config);
+      
+      if (response.ok) {
+        if (method === 'GET' || method === 'POST') {
+          try {
+            const data = await response.json();
+            return { success: true, data };
+          } catch (e) {
+            return { success: true }; // JSON içeriği olmayabilir
+          }
+        }
+        return { success: true };
+      }
+    } catch (proxyError) {
+      console.warn('Proxy ile istek başarısız, direk URL deneniyor:', proxyError);
+    }
+    
+    // Proxy başarısız olursa direk URL'yi dene
+    const response = await fetch(directUrl, config);
     
     // Yanıtı kontrol et ve döndür
     if (response.ok) {
@@ -1214,18 +1251,44 @@ const Chat = () => {
     try {
       setApiStatus('connecting');
       
-      const response = await fetch(`${API_URL}/health`, {
+      // Doğrudan ve proxy URL'leri
+      const directUrl = `${API_URL}/health`;
+      const proxiedUrl = getProxiedUrl(directUrl);
+      
+      console.log('API bağlantısını kontrol ediyorum...');
+      
+      // Önce proxy ile dene
+      try {
+        const response = await fetch(proxiedUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (response.ok) {
+          console.log('Proxy ile API bağlantısı başarılı');
+          setApiStatus('connected');
+          return true;
+        }
+      } catch (proxyError) {
+        console.warn('Proxy bağlantısı başarısız:', proxyError);
+      }
+      
+      // Proxy başarısız olursa, direk bağlantıyı dene
+      const response = await fetch(directUrl, {
         method: 'GET',
         headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'Origin': window.location.origin
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
         },
-        mode: 'cors',
         signal: AbortSignal.timeout(5000)
       });
       
       if (response.ok) {
-        console.log('API bağlantısı başarılı');
+        console.log('Doğrudan API bağlantısı başarılı');
         setApiStatus('connected');
         return true;
       } else {
