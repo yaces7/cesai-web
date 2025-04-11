@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive, FaSpinner, FaThumbtack, FaUnlink } from 'react-icons/fa';
+import { FaRegClock, FaChevronDown, FaChevronUp, FaPlus, FaSignOutAlt, FaCog, FaTrash, FaEdit, FaArchive, FaSpinner, FaThumbtack, FaUnlink, FaRegFileAlt, FaBook } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
@@ -323,6 +323,32 @@ const UserAvatar = styled.div`
 const SidebarBottom = styled.div`
   padding: 1rem;
   border-top: 1px solid var(--border-color);
+`;
+
+// Yeni Sohbet Butonu Ekliyoruz
+const NewChatButton = styled.button`
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  margin: 0.5rem 0;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  
+  &:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-color);
+  }
+  
+  svg {
+    margin-right: 8px;
+    color: var(--accent-color);
+  }
 `;
 
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
@@ -775,15 +801,29 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     );
   };
   
+  const handleNewChat = () => {
+    // Doğrudan "new" sayfasına yönlendir, bu sayfada boş bir mesaj kutusu olacak
+    navigate('/chat/new');
+    
+    // Mobil görünümde sidebar'ı kapat
+    if (window.innerWidth <= 768) {
+      setShowSidebar(false);
+    }
+  };
+  
   return (
     <SidebarContainer showSidebar={showSidebar}>
       <SidebarTop>
         <SidebarHeader>
           <Logo>CesAI</Logo>
         </SidebarHeader>
+        
+        <NewChatButton onClick={handleNewChat}>
+          <FaBook /> Yeni Sohbet Oluştur
+        </NewChatButton>
+        
+        {error && <ErrorMessage>{error}</ErrorMessage>}
       </SidebarTop>
-      
-      {error && <ErrorMessage>{error}</ErrorMessage>}
       
       <SidebarMiddle>
         {/* Sabitlenmiş Sohbetler */}

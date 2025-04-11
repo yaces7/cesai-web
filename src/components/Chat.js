@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle, FaWifi, FaExclamationTriangle, FaRegCopy, FaSync, FaRegComment } from 'react-icons/fa';
+import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle, FaWifi, FaExclamationTriangle, FaRegCopy, FaSync, FaRegComment, FaBook } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection } from 'firebase/firestore';
@@ -1147,92 +1147,68 @@ const Chat = () => {
     );
   }
   
+  // Render fonksiyonu
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+  
+  // Sayfa yükleniyor
+  if (!isNewChat && !conversation && loading) {
     return (
       <ChatContainer>
-      {/* Kopyala bildirimi */}
-      <CopyNotification className={showCopyNotification ? 'show' : ''}>
-        <FaRegCopy /> Mesaj panoya kopyalandı
-      </CopyNotification>
-      
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <FaSpinner className="spinner" size={24} />
+        </div>
+      </ChatContainer>
+    );
+  }
+  
+  return (
+    <ChatContainer>
       <ChatHeader>
-        <h1>{conversation ? conversation.title : 'CesAI'}</h1>
-        {showConnectionStatus && (
-          <ConnectionStatus offline={isOffline} visible={showConnectionStatus}>
-            {isOffline ? (
-              <>
-                <FaWifi /> Çevrimdışı
-              </>
-            ) : (
-              <>
-                <FaWifi /> Bağlandı
-              </>
-            )}
-          </ConnectionStatus>
-        )}
+        <h1>
+          {isNewChat ? "Yeni Sohbet" : conversation?.title || "Yükleniyor..."}
+        </h1>
+        <ConnectionStatus status={apiStatus} onRetryClick={retryApiConnection} />
       </ChatHeader>
       
-      <MessagesContainer ref={messagesContainerRef}>
-        {/* Yükleme durumu */}
-        {loadingConversation ? (
-          <EmptyStateContainer>
-            <FaSpinner className="spinner" size={32} />
-            <EmptyStateTitle>Sohbet yükleniyor...</EmptyStateTitle>
-          </EmptyStateContainer>
-        ) : notFound ? (
-          /* Sohbet bulunamadı durumu */
-          <EmptyStateContainer>
-            <FaExclamationTriangle size={40} />
-            <EmptyStateTitle>Sohbet bulunamadı</EmptyStateTitle>
-            <EmptyStateText>
-              Aradığınız sohbet bulunamadı veya silinmiş olabilir. Lütfen sol menüden başka bir sohbet seçin veya yeni bir sohbet başlatın.
-            </EmptyStateText>
-          </EmptyStateContainer>
-        ) : currentChatId === "new" && messages.length === 0 ? (
-          /* Yeni sohbet başlatma durumu */
-          <EmptyStateContainer>
-            <FaPaperPlane size={40} />
-            <EmptyStateTitle>Yeni bir sohbet başlat</EmptyStateTitle>
-            <EmptyStateText>
-              Aşağıdan bir mesaj göndererek yeni bir sohbet başlatabilirsiniz.
-            </EmptyStateText>
-          </EmptyStateContainer>
-        ) : messages.length > 0 ? (
-          /* Mesajlar varsa göster */
-          messages.map((message, index) => (
-            <Message key={`${index}-${message.timestamp}`} message={message} index={index} />
-          ))
+      <MessagesContainer 
+        ref={messagesContainerRef} 
+        onScroll={handleScroll}
+      >
+        {isNewChat && messages.length === 0 ? (
+          <div style={{ 
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            textAlign: 'center',
+            color: 'var(--text-secondary)'
+          }}>
+            <FaBook size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+            <h2>Yeni bir sohbet başlatın</h2>
+            <p>Merak ettiğiniz bir konuyu sorun veya bir şey yapmak istediğinizi belirtin</p>
+          </div>
         ) : (
-          /* Henüz hiç mesaj yoksa */
-          <EmptyStateContainer>
-            <FaRegComment size={40} />
-            <EmptyStateTitle>Henüz hiç mesaj yok</EmptyStateTitle>
-            <EmptyStateText>
-              Bu sohbette henüz hiç mesaj yok. Aşağıdan bir mesaj göndererek başlayabilirsiniz.
-            </EmptyStateText>
-          </EmptyStateContainer>
+          messages.map((message, index) => (
+            <Message key={message.id || index} message={message} index={index} />
+          ))
         )}
-        
         <div ref={messagesEndRef} />
-        
-        {showScrollButton && (
-          <ScrollToBottomButton onClick={scrollToBottom}>
-            <FaArrowDown />
-          </ScrollToBottomButton>
-        )}
       </MessagesContainer>
       
       <InputContainer onSubmit={handleSubmit}>
-        <Input
-          type="text"
-          placeholder="Bir mesaj yazın..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={loading || !user}
-        />
-        <AttachButton type="button" disabled={loading || !user}>
+        <AttachButton type="button">
           <FaPaperclip />
         </AttachButton>
-        <SendButton type="submit" disabled={!input.trim() || loading || !user}>
+        <Input
+          type="text"
+          placeholder={isNewChat ? "Yeni sohbet başlatmak için bir şeyler yazın..." : "Mesajınızı yazın..."}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+        />
+        <SendButton type="submit" disabled={loading || !input.trim()}>
           {loading ? <FaSpinner className="spinner" /> : <FaPaperPlane />}
         </SendButton>
       </InputContainer>
