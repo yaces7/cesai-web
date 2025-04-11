@@ -815,7 +815,7 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     <SidebarContainer showSidebar={showSidebar}>
       <SidebarTop>
         <SidebarHeader>
-          <Logo>CesAI</Logo>
+          <Logo>CesaAI</Logo>
         </SidebarHeader>
         
         <NewChatButton onClick={handleNewChat}>
