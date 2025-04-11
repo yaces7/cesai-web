@@ -451,7 +451,8 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': window.location.origin
       },
       mode: 'cors',
       signal: AbortSignal.timeout(timeoutMs),
@@ -1249,7 +1250,8 @@ const Chat = () => {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'Origin': window.location.origin
           },
           mode: 'cors',
           credentials: 'include',
