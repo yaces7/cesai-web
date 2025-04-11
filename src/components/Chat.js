@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip } from 'react-icons/fa';
+import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -199,6 +199,51 @@ const ErrorContainer = styled.div`
   text-align: center;
 `;
 
+const FeedbackButtons = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  
+  &:hover {
+    opacity: 1;
+  }
+`;
+
+const FeedbackButton = styled.button`
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  
+  &:hover {
+    background: var(--bg-hover);
+    color: ${props => props.positive ? 'var(--accent-color)' : '#ff6b6b'};
+  }
+  
+  &.active {
+    color: ${props => props.positive ? 'var(--accent-color)' : '#ff6b6b'};
+  }
+`;
+
+const MessageAnalysis = styled.div`
+  font-size: 0.75rem;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-style: italic;
+  max-width: 90%;
+`;
+
+// API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 // Chat Component
 const Chat = () => {
   const { chatId } = useParams();
@@ -211,6 +256,7 @@ const Chat = () => {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState(null);
+  const [feedbackState, setFeedbackState] = useState({});
   const navigate = useNavigate();
   
   const messagesContainerRef = useRef(null);
@@ -354,6 +400,89 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
   
+  // API'den yapay zeka yanıtı al
+  const getAIResponse = async (userMessage) => {
+    try {
+      // Firebase kimlik doğrulama token'ını al
+      const token = await user.getIdToken();
+      
+      const response = await fetch(`${API_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          conversation_id: chatId,
+          preferences: {
+            style: 'casual',
+            detailed: true
+          }
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API hatası: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return {
+        text: data.message || "Üzgünüm, bir yanıt oluşturulamadı.",
+        analysis: data.analysis || "",
+        context: data.context || {},
+        code_blocks: data.code_blocks || [],
+        security_insights: data.security_insights || ""
+      };
+    } catch (error) {
+      console.error('AI yanıtı alınırken hata oluştu:', error);
+      throw error;
+    }
+  };
+  
+  // Mesaj geri bildirimi gönder
+  const sendFeedback = async (messageId, message, response, score) => {
+    try {
+      if (!user) return;
+      
+      // Zaten bu mesaja geri bildirim verilmiş mi kontrol et
+      if (feedbackState[messageId] !== undefined) return;
+      
+      // Geri bildirim durumunu güncelle
+      setFeedbackState(prev => ({
+        ...prev,
+        [messageId]: score
+      }));
+      
+      // Firebase kimlik doğrulama token'ını al
+      const token = await user.getIdToken();
+      
+      // Geri bildirimi API'ye gönder
+      const response = await fetch(`${API_URL}/api/learn`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          message: message,
+          response: response,
+          feedback_score: score,
+          preferences: {
+            conversation_id: chatId
+          }
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Geri bildirim gönderilirken API hatası oluştu');
+      }
+      
+    } catch (error) {
+      console.error('Geri bildirim gönderilirken hata oluştu:', error);
+    }
+  };
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -394,12 +523,36 @@ const Chat = () => {
       // API kullanım sınırlarını kontrol et
       await updateApiUsage(user.uid);
       
-      // Yapay zeka cevabı oluştur (gerçek uygulamada API'ye istek gönderilecek)
-      setTimeout(async () => {
-        const aiResponse = {
-          text: `"${input}" mesajınızı aldım. Bu bir örnek cevaptır. Gerçek uygulamada API'ye bağlanarak gerçek cevaplar alınacaktır.`,
+      // Yapay zeka cevabı oluştur
+      try {
+        const aiResponseData = await getAIResponse(input.trim());
+        
+        const aiMessage = {
+          text: aiResponseData.text,
           isUser: false,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          analysis: aiResponseData.analysis,
+          context: aiResponseData.context,
+          code_blocks: aiResponseData.code_blocks,
+          security_insights: aiResponseData.security_insights
+        };
+        
+        const finalMessages = [...updatedMessages, aiMessage];
+        
+        await updateDoc(conversationRef, {
+          messages: finalMessages,
+          updatedAt: new Date().toISOString()
+        });
+        
+      } catch (apiError) {
+        console.error('API yanıtı alınırken hata oluştu:', apiError);
+        
+        // Varsayılan AI yanıtı
+        const aiResponse = {
+          text: `Üzgünüm, şu anda yanıt oluşturamıyorum. Teknik bir sorun oluştu.`,
+          isUser: false,
+          timestamp: new Date().toISOString(),
+          error: true
         };
         
         const finalMessages = [...updatedMessages, aiResponse];
@@ -408,9 +561,9 @@ const Chat = () => {
           messages: finalMessages,
           updatedAt: new Date().toISOString()
         });
-        
-        setLoading(false);
-      }, 1000);
+      }
+      
+      setLoading(false);
       
     } catch (error) {
       console.error('Mesaj gönderilirken hata oluştu:', error);
@@ -443,6 +596,52 @@ const Chat = () => {
     
     const date = new Date(timestamp);
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  // Mesaj bileşeni
+  const Message = ({ message, index }) => {
+    const { text, isUser, timestamp, analysis, context } = message;
+    const messageId = `msg-${index}-${timestamp}`;
+    const hasAnalysis = analysis && analysis.length > 0;
+    const hasContext = context && Object.keys(context).length > 0;
+    
+    return (
+      <MessageWrapper isUser={isUser}>
+        <div>
+          <MessageBubble isUser={isUser}>
+            {text}
+            {(hasAnalysis || hasContext) && (
+              <MessageAnalysis>
+                {hasContext && context.emotion && <span>Duygu: {context.emotion} </span>}
+                {hasAnalysis && <span>{analysis}</span>}
+              </MessageAnalysis>
+            )}
+          </MessageBubble>
+          
+          <MessageTime isUser={isUser}>
+            {formatTime(timestamp)}
+          </MessageTime>
+          
+          {!isUser && (
+            <FeedbackButtons>
+              <FeedbackButton 
+                positive
+                className={feedbackState[messageId] === 5 ? 'active' : ''}
+                onClick={() => sendFeedback(messageId, messages[index-1]?.text, text, 5)}
+              >
+                <FaThumbsUp /> Yararlı
+              </FeedbackButton>
+              <FeedbackButton 
+                className={feedbackState[messageId] === 1 ? 'active' : ''}
+                onClick={() => sendFeedback(messageId, messages[index-1]?.text, text, 1)}
+              >
+                <FaThumbsDown /> Yararlı değil
+              </FeedbackButton>
+            </FeedbackButtons>
+          )}
+        </div>
+      </MessageWrapper>
+    );
   };
   
   // chatId yok veya "new" ise, boş içerik göster
@@ -510,16 +709,7 @@ const Chat = () => {
           </EmptyStateContainer>
         ) : (
           messages.map((message, index) => (
-            <MessageWrapper key={index} isUser={message.isUser}>
-              <div>
-                <MessageBubble isUser={message.isUser}>
-                  {message.text}
-                </MessageBubble>
-                <MessageTime isUser={message.isUser}>
-                  {formatTime(message.timestamp)}
-                </MessageTime>
-              </div>
-            </MessageWrapper>
+            <Message key={index} message={message} index={index} />
           ))
         )}
         
