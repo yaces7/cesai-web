@@ -536,10 +536,20 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       setError(null);
       
       const chatId = await createConversation('Yeni Sohbet');
+      console.log(`Yeni sohbet oluşturuldu, ID: ${chatId}`);
       
+      // Yeni sohbete yönlendir ve aktif sohbet olarak ayarla
       setShowNewChatDropdown(false);
-      navigate(`/chat/${chatId}`);
       setActiveConversation(chatId);
+      navigate(`/chat/${chatId}`);
+      
+      // Timeout ile diğer bileşenlerin güncellenmesini bekle
+      setTimeout(() => {
+        const chatElement = document.getElementById(`chat-${chatId}`);
+        if (chatElement) {
+          chatElement.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 500);
     } catch (error) {
       console.error('Sohbet oluşturulurken hata oluştu:', error);
       setError('Sohbet oluşturulurken hata oluştu: ' + error.message);
@@ -770,6 +780,7 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   // Sohbet listesi öğesi bileşeni
   const ConversationItem = ({ conversation, active }) => (
     <ConversationItemWrapper
+      id={`chat-${conversation.id}`}
       active={active}
       onClick={() => handleConversationClick(conversation.id)}
       onContextMenu={(e) => handleContextMenu(e, conversation)}

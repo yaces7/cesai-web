@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 // Styled Components
@@ -202,7 +202,7 @@ const ErrorContainer = styled.div`
 // Chat Component
 const Chat = () => {
   const { chatId } = useParams();
-  const { user, updateApiUsage, db } = useFirebase();
+  const { user, updateApiUsage, db, mesajCoz, createConversation } = useFirebase();
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -211,9 +211,26 @@ const Chat = () => {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
   
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  
+  // Sıkıştırılmış mesajları çözümleme
+  const processMessages = (messages) => {
+    if (!messages || !Array.isArray(messages)) return [];
+    
+    return messages.map(msg => {
+      // Eğer mesaj sıkıştırılmışsa, çözümle
+      if (msg.isCompressed) {
+        return {
+          ...msg,
+          text: mesajCoz(msg.text)
+        };
+      }
+      return msg;
+    });
+  };
   
   // Firestore'dan sohbeti çek
   useEffect(() => {
@@ -229,32 +246,64 @@ const Chat = () => {
     
     setLoadingConversation(true);
     setError(null);
+    console.log(`Sohbet ID'si ${chatId} için veri çekiliyor...`);
     
     const fetchConversation = async () => {
       try {
         const conversationRef = doc(db, 'conversations', chatId);
         
-        const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
+        // Önce bir kere veriyi çekelim, sonra dinlemeye başlayalım
+        const docSnap = await getDoc(conversationRef);
+        
+        if (!docSnap.exists()) {
+          console.error(`Sohbet ID'si ${chatId} bulunamadı.`);
+          setNotFound(true);
           setLoadingConversation(false);
-          
+          return;
+        }
+        
+        const conversationData = {
+          id: docSnap.id,
+          ...docSnap.data()
+        };
+        
+        // Kullanıcıya ait sohbet mi kontrol et
+        if (conversationData.userId !== user.uid) {
+          console.error(`Sohbet ID'si ${chatId} bu kullanıcıya ait değil.`);
+          setNotFound(true);
+          setLoadingConversation(false);
+          return;
+        }
+        
+        console.log(`Sohbet verisi başarıyla çekildi:`, conversationData);
+        setConversation(conversationData);
+        // Sıkıştırılmış mesajları çözümle
+        setMessages(processMessages(conversationData.messages || []));
+        setNotFound(false);
+        setLoadingConversation(false);
+        
+        // Şimdi gerçek zamanlı dinlemeye başlayalım
+        const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
           if (!docSnap.exists()) {
             setNotFound(true);
             return;
           }
           
-          const conversationData = {
+          const updatedConversationData = {
             id: docSnap.id,
             ...docSnap.data()
           };
           
           // Kullanıcıya ait sohbet mi kontrol et
-          if (conversationData.userId !== user.uid) {
+          if (updatedConversationData.userId !== user.uid) {
             setNotFound(true);
             return;
           }
           
-          setConversation(conversationData);
-          setMessages(conversationData.messages || []);
+          console.log('Sohbet gerçek zamanlı güncellendi:', updatedConversationData);
+          setConversation(updatedConversationData);
+          // Sıkıştırılmış mesajları çözümle
+          setMessages(processMessages(updatedConversationData.messages || []));
           setNotFound(false);
         }, (err) => {
           console.error('Sohbet dinlenirken hata oluştu:', err);
@@ -272,7 +321,7 @@ const Chat = () => {
     };
     
     fetchConversation();
-  }, [db, user, chatId]);
+  }, [db, user, chatId, mesajCoz]);
   
   // Mesajlar değiştiğinde aşağı kaydır
   useEffect(() => {
@@ -308,7 +357,20 @@ const Chat = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!input.trim() || loading || !user || !chatId || chatId === "new") return;
+    if (!input.trim() || loading || !user) return;
+    
+    // Eğer chatId "new" ise veya bulunmuyorsa, yeni bir sohbet oluştur
+    if (!chatId || chatId === "new") {
+      try {
+        const newChatId = await createConversation('Yeni Sohbet');
+        navigate(`/chat/${newChatId}`);
+        return; // Yeni sayfaya yönlendirildikten sonra işlemi durdur
+      } catch (error) {
+        console.error('Yeni sohbet oluşturulurken hata oluştu:', error);
+        setError('Yeni sohbet oluşturulurken hata oluştu: ' + error.message);
+        return;
+      }
+    }
     
     const userMessage = {
       text: input.trim(),

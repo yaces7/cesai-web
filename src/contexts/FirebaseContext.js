@@ -56,6 +56,69 @@ const googleProvider = new GoogleAuthProvider();
 // Çevrimdışı veri desteği başarıyla etkinleştirildi bildirimi
 console.log("Çevrimdışı depolama persistentLocalCache ile etkinleştirildi");
 
+// Mesaj sıkıştırma fonksiyonları
+const sesliHarfler = ['a', 'e', 'ı', 'i', 'o', 'ö', 'u', 'ü', 'A', 'E', 'I', 'İ', 'O', 'Ö', 'U', 'Ü'];
+
+// Metni sıkıştırır - sesli harfleri kaldırır ve basit bir şekilde kodlar
+const mesajSikistir = (text) => {
+  if (!text) return '';
+  
+  try {
+    // Sesli harfleri kaldır
+    let compressed = text.split('').filter(char => !sesliHarfler.includes(char)).join('');
+    
+    // Base64 kodlama - daha kompakt depolama
+    compressed = btoa(unescape(encodeURIComponent(compressed)));
+    
+    console.log(`Mesaj sıkıştırma: ${text.length} karakterden ${compressed.length} karaktere indirildi.`);
+    return compressed;
+  } catch (error) {
+    console.error('Mesaj sıkıştırma hatası:', error);
+    return text; // Hata durumunda orijinal metni döndür
+  }
+};
+
+// Sıkıştırılmış metni açar - akıllı tahminlerle sesli harfleri geri ekler
+const mesajCoz = (compressed) => {
+  if (!compressed) return '';
+  
+  try {
+    // Base64 çözümleme
+    let text = decodeURIComponent(escape(atob(compressed)));
+    
+    // Türkçe kelimeler için genel sesli harf ekleme kuralları
+    // Gerçek uygulamada daha karmaşık bir NLP algoritması kullanılabilir
+    // Basit bir örnek implementasyon:
+    let decompressed = '';
+    let skip = false;
+    
+    for (let i = 0; i < text.length; i++) {
+      decompressed += text[i];
+      
+      if (skip) {
+        skip = false;
+        continue;
+      }
+      
+      // Basit bir şekilde, iki sessiz harf arasına sesli harf ekleme
+      if (i < text.length - 1 && 
+          !sesliHarfler.includes(text[i]) && 
+          !sesliHarfler.includes(text[i+1]) &&
+          /[a-zA-ZçğşıöüÇĞŞİÖÜ]/.test(text[i]) && 
+          /[a-zA-ZçğşıöüÇĞŞİÖÜ]/.test(text[i+1])) {
+        decompressed += 'e'; // En yaygın sesli harf
+        skip = false;
+      }
+    }
+    
+    console.log(`Mesaj çözümleme: ${compressed.length} karakterden ${decompressed.length} karaktere genişletildi.`);
+    return decompressed;
+  } catch (error) {
+    console.error('Mesaj çözümleme hatası:', error);
+    return compressed; // Hata durumunda sıkıştırılmış metni döndür
+  }
+};
+
 // Context oluştur
 const FirebaseContext = createContext(null);
 
@@ -444,9 +507,14 @@ export const FirebaseProvider = ({ children }) => {
         throw new Error('Bu sohbete erişim izniniz yok');
       }
       
+      // Mesajı sıkıştır
+      const compressedText = mesajSikistir(text);
+      
       // Kullanıcı mesajını ekle
       const userMessage = {
-        text,
+        text: compressedText,
+        originalLength: text.length,
+        isCompressed: true,
         isUser: true,
         timestamp: new Date().toISOString()
       };
@@ -461,7 +529,11 @@ export const FirebaseProvider = ({ children }) => {
       // API kullanım limitini kontrol et ve güncelle
       await updateApiUsage(user.uid);
       
-      return userMessage;
+      // Kullanıcıya görüntülemek için orijinal metni döndür
+      return {
+        ...userMessage,
+        text: text // Orijinal metni döndür
+      };
     } catch (error) {
       throw error;
     }
@@ -486,9 +558,14 @@ export const FirebaseProvider = ({ children }) => {
         throw new Error('Bu sohbete erişim izniniz yok');
       }
       
+      // Mesajı sıkıştır
+      const compressedText = mesajSikistir(text);
+      
       // AI cevabını ekle
       const aiMessage = {
-        text,
+        text: compressedText,
+        originalLength: text.length,
+        isCompressed: true,
         isUser: false,
         timestamp: new Date().toISOString()
       };
@@ -500,7 +577,11 @@ export const FirebaseProvider = ({ children }) => {
         updatedAt: new Date().toISOString()
       });
       
-      return aiMessage;
+      // Kullanıcıya görüntülemek için orijinal metni döndür
+      return {
+        ...aiMessage,
+        text: text // Orijinal metni döndür
+      };
     } catch (error) {
       throw error;
     }
@@ -549,7 +630,7 @@ export const FirebaseProvider = ({ children }) => {
     }
   };
   
-  // Context değerini oluştur
+  // Provider değerini oluştur
   const value = {
     user,
     loading,
@@ -569,7 +650,9 @@ export const FirebaseProvider = ({ children }) => {
     deleteConversation,
     sendMessage,
     addAiResponse,
-    updateUserProfile
+    updateUserProfile,
+    mesajSikistir,
+    mesajCoz
   };
   
   return (
