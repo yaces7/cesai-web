@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle, FaWifi, FaExclamationTriangle, FaRegCopy, FaSync, FaRegComment } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection } from 'firebase/firestore';
 import { message } from 'antd';
 import { ReactMarkdown } from 'react-markdown/lib/react-markdown';
 
@@ -871,176 +871,95 @@ const Chat = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!input.trim() || loading || !user) return;
+    if (!input.trim()) return;
     
-    // Gönderilecek mesajı geçici olarak sakla
-    const messageToSend = input.trim();
-    setInput(''); // Hemen temizle
-    setLoading(true);
+    const userMessage = input.trim();
+    setInput('');
     
     try {
-      // Eğer chatId "new" ise veya bulunmuyorsa, yeni bir sohbet oluştur
-      if (!currentChatId || currentChatId === "new") {
-        console.log("Yeni sohbet oluşturuluyor ve mesaj gönderiliyor...");
+      setLoading(true);
+      setError(null);
+      
+      // Boş sohbet ise (veya id='new' ise) önce yeni sohbet oluştur
+      let currentId = currentChatId;
+      let initialMessage = false;
+      
+      if (currentChatId === "new") {
+        // Sidebar'da tanımladığımız createNewChat fonksiyonunu kullanmak için
+        // navigate ve URL yapısını kullanacağız, bu nedenle önce mesajı state'e ekleyelim
+        initialMessage = true;
         
-        // Kullanıcı mesajını oluştur
-    const userMessage = {
-          text: messageToSend,
-      isUser: true,
-      timestamp: new Date().toISOString()
-    };
-    
-        // Geçici mesaj listesine ekle
-        setMessages([userMessage]);
+        // Geçici olarak kullanıcı mesajını göster
+        setMessages([{
+          id: Date.now().toString(),
+          text: userMessage,
+          sender: "user",
+          timestamp: new Date().toISOString()
+        }]);
         
-        // Yeni bir sohbet oluştur (başlık olarak mesajın ilk 20 karakterini kullan)
-        const title = messageToSend.length > 20 
-          ? messageToSend.substring(0, 20) + '...' 
-          : messageToSend;
+        // Sidebar bileşenine erişim sağlamak zor olduğu için aynı mantığı burada uygulayalım
+        const now = new Date();
+        const timestamp = now.toISOString();
         
-        const newChatId = await createConversation(title);
-        console.log(`Yeni sohbet oluşturuldu, ID: ${newChatId}`);
+        // İlk mesajdan başlık oluştur
+        const title = userMessage
+          ? userMessage.substring(0, 30) + (userMessage.length > 30 ? "..." : "") 
+          : "Yeni Sohbet";
         
-        // Yapay zeka cevabı oluştur
-        try {
-          // Yükleme göstergesi için durum mesajı
-          setMessages([userMessage, {
-            text: "Yanıt oluşturuluyor...",
-            isUser: false,
-            timestamp: new Date().toISOString(),
-            _loading: true
-          }]);
-          
-          // API kullanım sınırlarını kontrol et
-          await updateApiUsage(user.uid);
-          
-          const aiResponseData = await getAIResponse(messageToSend);
-          
-          const aiMessage = {
-            text: aiResponseData.text,
-            isUser: false,
-            timestamp: new Date().toISOString(),
-            analysis: aiResponseData.analysis,
-            context: aiResponseData.context,
-            code_blocks: aiResponseData.code_blocks,
-            security_insights: aiResponseData.security_insights
-          };
-          
-          // Mesajları güncelle
-          setMessages([userMessage, aiMessage]);
-          
-          // Yeni oluşturulan sohbete yönlendir ve sayfayı yenileme sorunlarını önlemek için
-          // window.location.href kullanıyoruz
-          window.location.href = `/chat/${newChatId}`;
-          
-        } catch (apiError) {
-          console.error('API yanıtı alınırken hata oluştu:', apiError);
-          
-          // Varsayılan AI yanıtı
-          const aiResponse = {
-            text: `Üzgünüm, şu anda yanıt oluşturamıyorum. Teknik bir sorun oluştu.`,
-            isUser: false,
-            timestamp: new Date().toISOString(),
-            error: true
-          };
-          
-          setMessages([userMessage, aiResponse]);
-          window.location.href = `/chat/${newChatId}`;
-        }
-        
-        setLoading(false);
-        return;
-      }
-      
-      // Artık mevcut bir sohbete mesaj gönderiyoruz
-      console.log(`${currentChatId} ID'li sohbete mesaj gönderiliyor:`, messageToSend);
-      
-      const userMessage = {
-        text: messageToSend,
-        isUser: true,
-        timestamp: new Date().toISOString()
-      };
-      
-      const existingMessages = [...messages];
-      
-      // Kullanıcıya hemen yanıt göster (optimistik UI güncellemesi)
-      setMessages([...existingMessages, userMessage]);
-      
-      try {
-        // Firestore'a kullanıcı mesajını ekle
-        const conversationRef = doc(db, 'conversations', currentChatId);
-      await updateDoc(conversationRef, {
-          messages: [...existingMessages, userMessage],
-        updatedAt: new Date().toISOString()
-      });
-      
-      // API kullanım sınırlarını kontrol et
-      await updateApiUsage(user.uid);
-      
-        // Yapay zeka cevabı oluştur
-        try {
-          // Yükleme göstergesi için durum mesajı
-          setMessages([...existingMessages, userMessage, {
-            text: "Yanıt oluşturuluyor...",
-          isUser: false,
-            timestamp: new Date().toISOString(),
-            _loading: true
-          }]);
-          
-          const aiResponseData = await getAIResponse(messageToSend);
-          
-          const aiMessage = {
-            text: aiResponseData.text,
-            isUser: false,
-            timestamp: new Date().toISOString(),
-            analysis: aiResponseData.analysis,
-            context: aiResponseData.context,
-            code_blocks: aiResponseData.code_blocks,
-            security_insights: aiResponseData.security_insights
-          };
-          
-          // Firestore'u güncelle
-          const finalMessages = [...existingMessages, userMessage, aiMessage];
-        await updateDoc(conversationRef, {
-          messages: finalMessages,
-          updatedAt: new Date().toISOString()
+        const docRef = await addDoc(collection(db, "conversations"), {
+          userId: user.uid,
+          title: title,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          pinned: false,
+          archived: false,
+          messages: [{
+            id: Date.now().toString(),
+            text: userMessage,
+            sender: "user",
+            timestamp: timestamp
+          }]
         });
         
-          // UI'ı güncelle
-          setMessages(finalMessages);
-          
-        } catch (apiError) {
-          console.error('API yanıtı alınırken hata oluştu:', apiError);
-          
-          // Varsayılan AI yanıtı
-          const aiResponse = {
-            text: `Üzgünüm, şu anda yanıt oluşturamıyorum. Teknik bir sorun oluştu.`,
-        isUser: false,
-            timestamp: new Date().toISOString(),
-            error: true
-      };
-      
-          const finalMessages = [...existingMessages, userMessage, aiResponse];
-      
+        currentId = docRef.id;
+        
+        // URL'yi güncelle ama sayfayı yenileme
+        navigate(`/chat/${currentId}`, { replace: true });
+        
+        // Yeni konuşmayı izlemeye başla
+        fetchConversation(currentId);
+      } else {
+        // Mevcut sohbete mesaj ekle
+        const userMessageObj = {
+          id: Date.now().toString(),
+          text: userMessage,
+          sender: "user",
+          timestamp: new Date().toISOString()
+        };
+        
+        // Önce local state'i güncelle (UI daha hızlı tepki versin)
+        setMessages(prevMessages => [...prevMessages, userMessageObj]);
+        
+        // Firestore'daki mesajları güncelle
+        const conversationRef = doc(db, 'conversations', currentId);
         await updateDoc(conversationRef, {
-            messages: finalMessages,
+          messages: [...messages, userMessageObj],
           updatedAt: new Date().toISOString()
         });
-          
-          setMessages(finalMessages);
-        }
-        
-      } catch (dbError) {
-        console.error('Firestore güncelleme hatası:', dbError);
-        setError('Veritabanına erişim hatası: ' + dbError.message);
-        
-        // Optimistik güncellemeden vazgeç, orijinal mesajlara dön
-        setMessages(existingMessages);
       }
       
+      // Sohbet oluşturulduğunda veya mesaj eklendiğinde otomatik kaydırma
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+      
+      // API yanıtını al (yeni ya da mevcut sohbet için)
+      if (!initialMessage || currentId) {
+        await getAIResponse(userMessage);
+      }
     } catch (error) {
-      console.error('Mesaj gönderilirken hata oluştu:', error);
-      setError('Mesaj gönderme hatası: ' + error.message);
+      console.error("Error sending message:", error);
+      setError("Mesaj gönderilirken bir hata oluştu.");
     } finally {
       setLoading(false);
     }

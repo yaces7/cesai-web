@@ -54,51 +54,6 @@ const Logo = styled.div`
   -webkit-text-fill-color: transparent;
 `;
 
-const NewChatButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  
-  &:hover {
-    transform: scale(1.05);
-    background: linear-gradient(90deg, #646cff, #8b3dff);
-  }
-`;
-
-const NewChatDropdown = styled(motion.div)`
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  margin-top: 0.5rem;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-`;
-
-const NewChatOption = styled.button`
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 0.8rem 1rem;
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.2s;
-  
-  &:hover {
-    background: var(--input-bg);
-  }
-`;
-
 const SidebarMiddle = styled.div`
   flex: 1;
   overflow-y: auto;
@@ -372,7 +327,6 @@ const SidebarBottom = styled.div`
 
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
   const [conversationsOpen, setConversationsOpen] = useState(true);
-  const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
   const [activeConversation, setActiveConversation] = useState(null);
@@ -450,53 +404,52 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   }, []);
   
   const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (error) {
-      console.error('Çıkış yapılırken hata oluştu:', error);
-    }
+    await logout();
+    navigate('/login');
   };
   
   const handleSettings = () => {
     navigate('/settings');
   };
   
-  const handleNewChat = () => {
-    setShowNewChatDropdown(!showNewChatDropdown);
-  };
-  
-  const createNewChat = async () => {
+  const createNewChat = async (initialMessage = "") => {
     if (!user) return;
     
+    setLoading(true);
+    
     try {
-      setLoading(true);
-      setError(null);
+      const now = new Date();
+      const timestamp = now.toISOString();
       
-      // Yeni sohbet oluşturma işlemini başlatmadan önce kontrol et
-      console.log('Yeni sohbet oluşturuluyor...');
+      // İlk mesajdan başlık oluştur
+      const title = initialMessage 
+        ? initialMessage.substring(0, 30) + (initialMessage.length > 30 ? "..." : "") 
+        : "Yeni Sohbet";
       
-      // createConversation fonksiyonunu çağırarak yeni sohbet oluştur
-      const chatId = await createConversation('Yeni Sohbet');
+      const docRef = await addDoc(collection(db, "conversations"), {
+        userId: user.uid,
+        title: title,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        pinned: false,
+        archived: false,
+        messages: initialMessage ? [{
+          id: Date.now().toString(),
+          text: initialMessage,
+          sender: "user",
+          timestamp: timestamp
+        }] : []
+      });
       
-      if (!chatId) {
-        throw new Error('Sohbet oluşturuldu, ancak ID alınamadı');
-      }
+      // Yeni oluşturulan sohbeti vurgula
+      setActiveConversation(docRef.id);
       
-      console.log(`Yeni sohbet başarıyla oluşturuldu, ID: ${chatId}`);
+      // Yeni sohbete yönlendir
+      navigate(`/chat/${docRef.id}`);
       
-      // Önce dropdown'ı kapat
-      setShowNewChatDropdown(false);
-      
-      // Aktif sohbeti güncelle
-      setActiveConversation(chatId);
-      
-      // Sayfanın her durumda tamamen yenilenmesi için window.location.href kullanıyoruz
-      console.log(`${chatId} ID'li sohbete yönlendiriliyor...`);
-      window.location.href = `/chat/${chatId}`;
-      
+      return docRef.id;
     } catch (error) {
-      console.error('Yeni sohbet oluşturulurken hata oluştu:', error);
+      console.error("Error creating conversation:", error);
       setError('Sohbet oluşturulamadı: ' + error.message);
     } finally {
       setLoading(false);
@@ -827,25 +780,7 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       <SidebarTop>
         <SidebarHeader>
           <Logo>CesAI</Logo>
-          <NewChatButton onClick={handleNewChat} disabled={loading}>
-            {loading ? <FaSpinner className="spinner" /> : <FaPlus />}
-          </NewChatButton>
         </SidebarHeader>
-        
-        <AnimatePresence>
-          {showNewChatDropdown && (
-            <NewChatDropdown
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <NewChatOption onClick={createNewChat}>
-                <FaPlus style={{ marginRight: '8px' }} /> Yeni Sohbet Oluştur
-              </NewChatOption>
-            </NewChatDropdown>
-          )}
-        </AnimatePresence>
       </SidebarTop>
       
       {error && <ErrorMessage>{error}</ErrorMessage>}
