@@ -771,124 +771,128 @@ const Chat = () => {
     
     // Gönderilecek mesajı geçici olarak sakla
     const messageToSend = input.trim();
-    
-    // Eğer chatId "new" ise veya bulunmuyorsa, yeni bir sohbet oluştur
-    if (!chatId || chatId === "new") {
-      try {
-        console.log('Yeni bir sohbet oluşturuluyor...');
-        setLoading(true);
-        
-        // Önce input'u temizle
-        setInput('');
-        
-        // Yeni sohbet oluştur
-        const newChatId = await createConversation('Yeni Sohbet');
-        console.log(`Yeni sohbet oluşturuldu, ID: ${newChatId}, mesaj gönderilecek`);
-        
-        // Yönlendirme yaptıktan sonra, aynı sayfada kalmayacağız
-        // Yönlendirme işlemi, yeni bir Chat bileşeni başlatacak
-        navigate(`/chat/${newChatId}`);
-        
-        // URL değişikliği sonucunda yeni bir Chat bileşeni yüklenecek
-        // Bu nedenle mevcut bileşen üzerinden işleme devam etmeyelim
-        return;
-        
-      } catch (error) {
-        console.error('Yeni sohbet oluşturulurken hata oluştu:', error);
-        setError('Yeni sohbet oluşturulurken hata oluştu: ' + error.message);
-        setLoading(false);
-        return;
-      }
-    }
-    
-    // Artık mevcut bir sohbete mesaj gönderiyoruz
-    const userMessage = {
-      text: messageToSend,
-      isUser: true,
-      timestamp: new Date().toISOString()
-    };
-    
-    setInput('');
+    setInput(''); // Hemen temizle
     setLoading(true);
     
     try {
-      // Önce kullanıcı mesajını ekle
-      const updatedMessages = [...messages, userMessage];
-      
-      const conversationRef = doc(db, 'conversations', chatId);
-      await updateDoc(conversationRef, {
-        messages: updatedMessages,
-        updatedAt: new Date().toISOString()
-      });
-      
-      // API kullanım sınırlarını kontrol et
-      await updateApiUsage(user.uid);
-      
-      // Yapay zeka cevabı oluştur
-      try {
-        const aiResponseData = await getAIResponse(messageToSend);
+      // Eğer chatId "new" ise veya bulunmuyorsa, yeni bir sohbet oluştur
+      if (!chatId || chatId === "new") {
+        console.log("Yeni sohbet oluşturuluyor ve mesaj gönderiliyor...");
         
-        const aiMessage = {
-          text: aiResponseData.text,
-          isUser: false,
-          timestamp: new Date().toISOString(),
-          analysis: aiResponseData.analysis,
-          context: aiResponseData.context,
-          code_blocks: aiResponseData.code_blocks,
-          security_insights: aiResponseData.security_insights
-        };
+        // Yeni bir sohbet oluştur (başlık olarak mesajın ilk 20 karakterini kullan)
+        const title = messageToSend.length > 20 
+          ? messageToSend.substring(0, 20) + '...' 
+          : messageToSend;
         
-        const finalMessages = [...updatedMessages, aiMessage];
+        const newChatId = await createConversation(title);
+        console.log(`Yeni sohbet oluşturuldu, ID: ${newChatId}`);
         
-        await updateDoc(conversationRef, {
-          messages: finalMessages,
-          updatedAt: new Date().toISOString()
-        });
+        // Veritabanı güncelleme tamamlanana kadar kısa bir bekleme
+        setTimeout(() => {
+          // Yeni oluşturulan sohbete yönlendir
+          navigate(`/chat/${newChatId}`, { replace: true });
+          
+          // Sayfayı temiz bir durumda yüklemek için ek bir seçenek
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        }, 100);
         
-      } catch (apiError) {
-        console.error('API yanıtı alınırken hata oluştu:', apiError);
-        
-        // Varsayılan AI yanıtı
-        const aiResponse = {
-          text: `Üzgünüm, şu anda yanıt oluşturamıyorum. Teknik bir sorun oluştu.`,
-          isUser: false,
-          timestamp: new Date().toISOString(),
-          error: true
-        };
-        
-        const finalMessages = [...updatedMessages, aiResponse];
-        
-        await updateDoc(conversationRef, {
-          messages: finalMessages,
-          updatedAt: new Date().toISOString()
-        });
+        setLoading(false);
+        return;
       }
       
-      setLoading(false);
+      // Artık mevcut bir sohbete mesaj gönderiyoruz
+      console.log(`${chatId} ID'li sohbete mesaj gönderiliyor:`, messageToSend);
       
-    } catch (error) {
-      console.error('Mesaj gönderilirken hata oluştu:', error);
-      setLoading(false);
-      setError('Mesaj gönderme hatası: ' + error.message);
-      
-      // Hata mesajını ekle
-      const errorMessage = {
-        text: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.',
-        isUser: false,
+      const userMessage = {
+        text: messageToSend,
+        isUser: true,
         timestamp: new Date().toISOString()
       };
       
-      const updatedMessages = [...messages, errorMessage];
+      const existingMessages = [...messages];
+      
+      // Kullanıcıya hemen yanıt göster (optimistik UI güncellemesi)
+      setMessages([...existingMessages, userMessage]);
       
       try {
+        // Firestore'a kullanıcı mesajını ekle
         const conversationRef = doc(db, 'conversations', chatId);
         await updateDoc(conversationRef, {
-          messages: updatedMessages,
+          messages: [...existingMessages, userMessage],
           updatedAt: new Date().toISOString()
         });
-      } catch (error) {
-        console.error('Hata mesajı eklenirken sorun oluştu:', error);
+        
+        // API kullanım sınırlarını kontrol et
+        await updateApiUsage(user.uid);
+        
+        // Yapay zeka cevabı oluştur
+        try {
+          // Yükleme göstergesi için durum mesajı
+          setMessages([...existingMessages, userMessage, {
+            text: "Yanıt oluşturuluyor...",
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            _loading: true
+          }]);
+          
+          const aiResponseData = await getAIResponse(messageToSend);
+          
+          const aiMessage = {
+            text: aiResponseData.text,
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            analysis: aiResponseData.analysis,
+            context: aiResponseData.context,
+            code_blocks: aiResponseData.code_blocks,
+            security_insights: aiResponseData.security_insights
+          };
+          
+          // Firestore'u güncelle
+          const finalMessages = [...existingMessages, userMessage, aiMessage];
+          await updateDoc(conversationRef, {
+            messages: finalMessages,
+            updatedAt: new Date().toISOString()
+          });
+          
+          // UI'ı güncelle
+          setMessages(finalMessages);
+          
+        } catch (apiError) {
+          console.error('API yanıtı alınırken hata oluştu:', apiError);
+          
+          // Varsayılan AI yanıtı
+          const aiResponse = {
+            text: `Üzgünüm, şu anda yanıt oluşturamıyorum. Teknik bir sorun oluştu.`,
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            error: true
+          };
+          
+          const finalMessages = [...existingMessages, userMessage, aiResponse];
+          
+          await updateDoc(conversationRef, {
+            messages: finalMessages,
+            updatedAt: new Date().toISOString()
+          });
+          
+          setMessages(finalMessages);
+        }
+        
+      } catch (dbError) {
+        console.error('Firestore güncelleme hatası:', dbError);
+        setError('Veritabanına erişim hatası: ' + dbError.message);
+        
+        // Optimistik güncellemeden vazgeç, orijinal mesajlara dön
+        setMessages(existingMessages);
       }
+      
+    } catch (error) {
+      console.error('Mesaj gönderilirken hata oluştu:', error);
+      setError('Mesaj gönderme hatası: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -992,6 +996,18 @@ const Chat = () => {
     </ErrorContainer>
   );
   
+  // Hata durumunu ekle (en başa)
+  if (error) {
+    return (
+      <ChatContainer>
+        <ChatHeader>
+          <h1>CesAI</h1>
+        </ChatHeader>
+        {renderErrorContent()}
+      </ChatContainer>
+    );
+  }
+  
   // chatId yok veya "new" ise, boş içerik göster
   if (!chatId || chatId === "new") {
     return (
@@ -1009,29 +1025,30 @@ const Chat = () => {
     );
   }
   
-  if (notFound) {
-    return <Navigate to="/" replace />;
-  }
-  
-  if (error) {
-    return (
-      <ChatContainer>
-        <ChatHeader>
-          <h1>CesAI</h1>
-        </ChatHeader>
-        {renderErrorContent()}
-      </ChatContainer>
-    );
-  }
-  
-  if (loadingConversation) {
+  if (notFound && chatId !== "new") {
     return (
       <ChatContainer>
         <ChatHeader>
           <h1>CesAI</h1>
         </ChatHeader>
         <EmptyStateContainer>
-          <FaSpinner className="spinner" size={30} />
+          <EmptyStateTitle>Sohbet bulunamadı</EmptyStateTitle>
+          <EmptyStateText>
+            Aradığınız sohbet bulunamadı veya silinmiş olabilir. Lütfen sol menüden başka bir sohbet seçin veya yeni bir sohbet başlatın.
+          </EmptyStateText>
+        </EmptyStateContainer>
+      </ChatContainer>
+    );
+  }
+  
+  if (loadingConversation && chatId !== "new") {
+    return (
+      <ChatContainer>
+        <ChatHeader>
+          <h1>CesAI</h1>
+        </ChatHeader>
+        <EmptyStateContainer>
+          <FaSpinner className="spinner" size={32} />
           <EmptyStateTitle>Sohbet yükleniyor...</EmptyStateTitle>
         </EmptyStateContainer>
       </ChatContainer>
@@ -1058,66 +1075,53 @@ const Chat = () => {
       </ChatHeader>
       
       <MessagesContainer ref={messagesContainerRef}>
-        {messages.length === 0 ? (
+        {/* Sohbet boşsa ya da mesaj yoksa veya "new" ise boş durum göster */}
+        {(!messages.length && chatId !== "new") ? (
           <EmptyStateContainer>
-            <EmptyStateTitle>Yeni Sohbet</EmptyStateTitle>
+            <EmptyStateTitle>Henüz hiç mesaj yok</EmptyStateTitle>
             <EmptyStateText>
-              CesAI ile sohbete başlamak için aşağıdaki metin kutusuna bir soru yazın veya bir konu hakkında konuşmak istediğinizi belirtin.
+              Bu sohbette henüz hiç mesaj yok. Aşağıdan bir mesaj göndererek başlayabilirsiniz.
             </EmptyStateText>
           </EmptyStateContainer>
-        ) : (
+        ) : messages.length > 0 ? (
+          // Mesajlar varsa göster
           messages.map((message, index) => (
-            <Message key={index} message={message} index={index} />
+            <Message key={`${index}-${message.timestamp}`} message={message} index={index} />
           ))
-        )}
-        
-        {loading && (
-          <MessageWrapper isUser={false}>
-            <div>
-              <MessageBubble isUser={false}>
-                <FaSpinner className="spinner" />
-              </MessageBubble>
-              <MessageTime isUser={false}>
-                {formatTime(new Date().toISOString())}
-              </MessageTime>
-            </div>
-          </MessageWrapper>
-        )}
+        ) : chatId === "new" ? (
+          // Yeni sohbet ise başlangıç mesajı göster
+          <EmptyStateContainer>
+            <EmptyStateTitle>Yeni bir sohbet başlat</EmptyStateTitle>
+            <EmptyStateText>
+              Aşağıdan bir mesaj göndererek yeni bir sohbet başlatabilirsiniz.
+            </EmptyStateText>
+          </EmptyStateContainer>
+        ) : null}
         
         <div ref={messagesEndRef} />
+        
+        {showScrollButton && (
+          <ScrollToBottomButton onClick={scrollToBottom}>
+            <FaArrowDown />
+          </ScrollToBottomButton>
+        )}
       </MessagesContainer>
       
       <InputContainer onSubmit={handleSubmit}>
-        <AttachButton type="button">
-          <FaPaperclip />
-        </AttachButton>
-        
-        <Input
+        <MessageInput
+          type="text"
+          placeholder="Bir mesaj yazın..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Bir mesaj yazın..."
-          disabled={loading || !conversation}
+          disabled={loading || !user}
         />
-        
-        <SendButton
-          type="submit"
-          disabled={!input.trim() || loading || !conversation}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <FaPaperPlane />
+        <AttachButton type="button" disabled={loading || !user}>
+          <FaPaperclip />
+        </AttachButton>
+        <SendButton type="submit" disabled={!input.trim() || loading || !user}>
+          {loading ? <FaSpinner className="spinner" /> : <FaPaperPlane />}
         </SendButton>
       </InputContainer>
-      
-      {showScrollButton && (
-        <ScrollToBottomButton
-          onClick={scrollToBottom}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <FaArrowDown />
-        </ScrollToBottomButton>
-      )}
     </ChatContainer>
   );
 };
