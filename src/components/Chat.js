@@ -779,6 +779,16 @@ const Chat = () => {
       if (!chatId || chatId === "new") {
         console.log("Yeni sohbet oluşturuluyor ve mesaj gönderiliyor...");
         
+        // Kullanıcı mesajını oluştur
+        const userMessage = {
+          text: messageToSend,
+          isUser: true,
+          timestamp: new Date().toISOString()
+        };
+        
+        // Geçici mesaj listesine ekle
+        setMessages([userMessage]);
+        
         // Yeni bir sohbet oluştur (başlık olarak mesajın ilk 20 karakterini kullan)
         const title = messageToSend.length > 20 
           ? messageToSend.substring(0, 20) + '...' 
@@ -787,16 +797,51 @@ const Chat = () => {
         const newChatId = await createConversation(title);
         console.log(`Yeni sohbet oluşturuldu, ID: ${newChatId}`);
         
-        // Veritabanı güncelleme tamamlanana kadar kısa bir bekleme
-        setTimeout(() => {
+        // Yapay zeka cevabı oluştur
+        try {
+          // Yükleme göstergesi için durum mesajı
+          setMessages([userMessage, {
+            text: "Yanıt oluşturuluyor...",
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            _loading: true
+          }]);
+          
+          // API kullanım sınırlarını kontrol et
+          await updateApiUsage(user.uid);
+          
+          const aiResponseData = await getAIResponse(messageToSend);
+          
+          const aiMessage = {
+            text: aiResponseData.text,
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            analysis: aiResponseData.analysis,
+            context: aiResponseData.context,
+            code_blocks: aiResponseData.code_blocks,
+            security_insights: aiResponseData.security_insights
+          };
+          
+          // Mesajları güncelle
+          setMessages([userMessage, aiMessage]);
+          
           // Yeni oluşturulan sohbete yönlendir
           navigate(`/chat/${newChatId}`, { replace: true });
           
-          // Sayfayı temiz bir durumda yüklemek için ek bir seçenek
-          setTimeout(() => {
-            window.location.reload();
-          }, 500);
-        }, 100);
+        } catch (apiError) {
+          console.error('API yanıtı alınırken hata oluştu:', apiError);
+          
+          // Varsayılan AI yanıtı
+          const aiResponse = {
+            text: `Üzgünüm, şu anda yanıt oluşturamıyorum. Teknik bir sorun oluştu.`,
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            error: true
+          };
+          
+          setMessages([userMessage, aiResponse]);
+          navigate(`/chat/${newChatId}`, { replace: true });
+        }
         
         setLoading(false);
         return;
@@ -982,34 +1027,19 @@ const Chat = () => {
     );
   };
   
-  // Hata oluştuğunda görüntülenecek içerik
-  const renderErrorContent = () => (
-    <ErrorContainer>
-      <FaExclamationTriangle size={40} />
-      <h2>Bir hata oluştu</h2>
-      <p>{error}</p>
-      {retryCount < 3 && (
-        <RetryButton onClick={retryApiConnection}>
-          <FaWifi /> Yeniden Dene
-        </RetryButton>
-      )}
-    </ErrorContainer>
-  );
+  // Sohbet yükleme durumlarını yönetmek için etkilenme durumları
+  useEffect(() => {
+    // Eğer chatId yoksa veya "new" ise, diğer durumları temizle
+    if (!chatId || chatId === "new") {
+      setLoadingConversation(false);
+      setNotFound(false);
+      setError(null);
+    }
+  }, [chatId]);
   
-  // Hata durumunu ekle (en başa)
-  if (error) {
-    return (
-      <ChatContainer>
-        <ChatHeader>
-          <h1>CesAI</h1>
-        </ChatHeader>
-        {renderErrorContent()}
-      </ChatContainer>
-    );
-  }
-  
-  // chatId yok veya "new" ise, boş içerik göster
-  if (!chatId || chatId === "new") {
+  // Bileşen render kısmı
+  // chatId yok veya "new" değilse, ve hiçbir conversation yüklenmemişse
+  if (!chatId) {
     return (
       <ChatContainer>
         <ChatHeader>
@@ -1025,32 +1055,23 @@ const Chat = () => {
     );
   }
   
-  if (notFound && chatId !== "new") {
+  // Hata durumu
+  if (error) {
     return (
       <ChatContainer>
         <ChatHeader>
           <h1>CesAI</h1>
         </ChatHeader>
-        <EmptyStateContainer>
-          <EmptyStateTitle>Sohbet bulunamadı</EmptyStateTitle>
-          <EmptyStateText>
-            Aradığınız sohbet bulunamadı veya silinmiş olabilir. Lütfen sol menüden başka bir sohbet seçin veya yeni bir sohbet başlatın.
-          </EmptyStateText>
-        </EmptyStateContainer>
-      </ChatContainer>
-    );
-  }
-  
-  if (loadingConversation && chatId !== "new") {
-    return (
-      <ChatContainer>
-        <ChatHeader>
-          <h1>CesAI</h1>
-        </ChatHeader>
-        <EmptyStateContainer>
-          <FaSpinner className="spinner" size={32} />
-          <EmptyStateTitle>Sohbet yükleniyor...</EmptyStateTitle>
-        </EmptyStateContainer>
+        <ErrorContainer>
+          <FaExclamationTriangle size={40} />
+          <h2>Bir hata oluştu</h2>
+          <p>{error}</p>
+          {retryCount < 3 && (
+            <RetryButton onClick={retryApiConnection}>
+              <FaWifi /> Yeniden Dene
+            </RetryButton>
+          )}
+        </ErrorContainer>
       </ChatContainer>
     );
   }
@@ -1075,28 +1096,42 @@ const Chat = () => {
       </ChatHeader>
       
       <MessagesContainer ref={messagesContainerRef}>
-        {/* Sohbet boşsa ya da mesaj yoksa veya "new" ise boş durum göster */}
-        {(!messages.length && chatId !== "new") ? (
+        {/* Yükleme durumu */}
+        {loadingConversation ? (
           <EmptyStateContainer>
-            <EmptyStateTitle>Henüz hiç mesaj yok</EmptyStateTitle>
+            <FaSpinner className="spinner" size={32} />
+            <EmptyStateTitle>Sohbet yükleniyor...</EmptyStateTitle>
+          </EmptyStateContainer>
+        ) : notFound ? (
+          /* Sohbet bulunamadı durumu */
+          <EmptyStateContainer>
+            <EmptyStateTitle>Sohbet bulunamadı</EmptyStateTitle>
             <EmptyStateText>
-              Bu sohbette henüz hiç mesaj yok. Aşağıdan bir mesaj göndererek başlayabilirsiniz.
+              Aradığınız sohbet bulunamadı veya silinmiş olabilir. Lütfen sol menüden başka bir sohbet seçin veya yeni bir sohbet başlatın.
             </EmptyStateText>
           </EmptyStateContainer>
-        ) : messages.length > 0 ? (
-          // Mesajlar varsa göster
-          messages.map((message, index) => (
-            <Message key={`${index}-${message.timestamp}`} message={message} index={index} />
-          ))
-        ) : chatId === "new" ? (
-          // Yeni sohbet ise başlangıç mesajı göster
+        ) : chatId === "new" && messages.length === 0 ? (
+          /* Yeni sohbet başlatma durumu */
           <EmptyStateContainer>
             <EmptyStateTitle>Yeni bir sohbet başlat</EmptyStateTitle>
             <EmptyStateText>
               Aşağıdan bir mesaj göndererek yeni bir sohbet başlatabilirsiniz.
             </EmptyStateText>
           </EmptyStateContainer>
-        ) : null}
+        ) : messages.length > 0 ? (
+          /* Mesajlar varsa göster */
+          messages.map((message, index) => (
+            <Message key={`${index}-${message.timestamp}`} message={message} index={index} />
+          ))
+        ) : (
+          /* Henüz hiç mesaj yoksa */
+          <EmptyStateContainer>
+            <EmptyStateTitle>Henüz hiç mesaj yok</EmptyStateTitle>
+            <EmptyStateText>
+              Bu sohbette henüz hiç mesaj yok. Aşağıdan bir mesaj göndererek başlayabilirsiniz.
+            </EmptyStateText>
+          </EmptyStateContainer>
+        )}
         
         <div ref={messagesEndRef} />
         
