@@ -364,6 +364,11 @@ const UserAvatar = styled.div`
   }
 `;
 
+const SidebarBottom = styled.div`
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
+`;
+
 const Sidebar = ({ showSidebar, setShowSidebar }) => {
   const [conversationsOpen, setConversationsOpen] = useState(true);
   const [showNewChatDropdown, setShowNewChatDropdown] = useState(false);
