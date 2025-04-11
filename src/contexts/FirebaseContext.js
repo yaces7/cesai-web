@@ -137,11 +137,36 @@ export const FirebaseProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState('dark'); // Varsayılan tema
   const [firebaseError, setFirebaseError] = useState(null);
+  const [idToken, setIdToken] = useState(null);
+  
+  // Firebase token'ını almak için yardımcı fonksiyon
+  const getFirebaseToken = async (forceRefresh = false) => {
+    if (!auth.currentUser) {
+      console.error("Token alınamadı: Oturum açık değil");
+      throw new Error("Oturum açık değil");
+    }
+    
+    try {
+      const token = await auth.currentUser.getIdToken(forceRefresh);
+      setIdToken(token);
+      return token;
+    } catch (error) {
+      console.error("Token alınırken hata oluştu:", error);
+      throw error;
+    }
+  };
   
   // Kullanıcı oturum durumunu izle
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (authUser) => {
       if (authUser) {
+        // Kullanıcı oturum açtığında token al
+        try {
+          await getFirebaseToken();
+        } catch (tokenError) {
+          console.error("Otomatik token alınırken hata:", tokenError);
+        }
+        
         // Kullanıcı verisini Firestore'dan al
         try {
           const userDocRef = doc(db, 'users', authUser.uid);
@@ -207,6 +232,7 @@ export const FirebaseProvider = ({ children }) => {
         }
       } else {
         setUser(null);
+        setIdToken(null);
       }
       setLoading(false);
     });
@@ -652,7 +678,9 @@ export const FirebaseProvider = ({ children }) => {
     addAiResponse,
     updateUserProfile,
     mesajSikistir,
-    mesajCoz
+    mesajCoz,
+    getFirebaseToken,
+    idToken
   };
   
   return (

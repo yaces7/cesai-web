@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle } from 'react-icons/fa';
+import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle, FaWifi, FaExclamationTriangle } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -70,11 +70,55 @@ const MessageBubble = styled.div`
   max-width: 70%;
   padding: 0.8rem 1rem;
   border-radius: 1rem;
-  background: ${props => props.isUser ? 'var(--accent-color)' : 'var(--bg-secondary)'};
-  color: ${props => props.isUser ? '#ffffff' : 'var(--text-primary)'};
+  background: ${props => props.isUser 
+    ? 'var(--accent-color)' 
+    : props.error 
+      ? 'rgba(255, 107, 107, 0.1)' 
+      : 'var(--bg-secondary)'};
+  color: ${props => props.isUser 
+    ? '#ffffff' 
+    : props.error 
+      ? '#ff6b6b' 
+      : 'var(--text-primary)'};
   margin: ${props => props.isUser ? '0 0 0 1rem' : '0 1rem 0 0'};
-  border: 1px solid ${props => props.isUser ? 'rgba(100, 108, 255, 0.4)' : 'var(--border-color)'};
+  border: 1px solid ${props => props.isUser 
+    ? 'rgba(100, 108, 255, 0.4)' 
+    : props.error 
+      ? 'rgba(255, 107, 107, 0.3)' 
+      : 'var(--border-color)'};
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  
+  .code-blocks {
+    margin-top: 0.5rem;
+  }
+  
+  .code-block {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.5rem;
+    border-radius: 0.3rem;
+    font-family: monospace;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .security-insights {
+    margin-top: 0.5rem;
+    border-left: 3px solid #ff9900;
+    padding-left: 0.5rem;
+    
+    h4 {
+      margin: 0 0 0.25rem 0;
+      font-size: 0.85rem;
+      color: #ff9900;
+    }
+    
+    p {
+      margin: 0;
+      font-size: 0.85rem;
+    }
+  }
 `;
 
 const MessageTime = styled.div`
@@ -241,13 +285,48 @@ const MessageAnalysis = styled.div`
   max-width: 90%;
 `;
 
+const ConnectionStatus = styled.div`
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  color: ${props => props.offline ? '#ff6b6b' : '#4caf50'};
+  background: ${props => props.offline ? 'rgba(255, 107, 107, 0.1)' : 'rgba(76, 175, 80, 0.1)'};
+  border: 1px solid ${props => props.offline ? 'rgba(255, 107, 107, 0.3)' : 'rgba(76, 175, 80, 0.3)'};
+  opacity: ${props => props.visible ? 1 : 0};
+  transition: opacity 0.3s;
+`;
+
+const RetryButton = styled.button`
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  
+  &:hover {
+    opacity: 0.9;
+  }
+`;
+
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // Chat Component
 const Chat = () => {
   const { chatId } = useParams();
-  const { user, updateApiUsage, db, mesajCoz, createConversation } = useFirebase();
+  const { user, updateApiUsage, db, mesajCoz, createConversation, getFirebaseToken } = useFirebase();
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -257,10 +336,52 @@ const Chat = () => {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState(null);
   const [feedbackState, setFeedbackState] = useState({});
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const navigate = useNavigate();
   
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  
+  // İnternet bağlantısı durumunu izle
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      setShowConnectionStatus(true);
+      setTimeout(() => setShowConnectionStatus(false), 3000);
+    };
+    
+    const handleOffline = () => {
+      setIsOffline(true);
+      setShowConnectionStatus(true);
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  // API bağlantısını kontrol eden fonksiyon
+  const checkApiConnection = async () => {
+    try {
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Zaman aşımı')), 5000)
+      );
+      
+      const fetchPromise = fetch(`${API_URL}/health`);
+      
+      const response = await Promise.race([fetchPromise, timeout]);
+      return response.ok;
+    } catch (error) {
+      console.error('API bağlantı kontrolü başarısız:', error);
+      return false;
+    }
+  };
   
   // Sıkıştırılmış mesajları çözümleme
   const processMessages = (messages) => {
@@ -403,10 +524,29 @@ const Chat = () => {
   // API'den yapay zeka yanıtı al
   const getAIResponse = async (userMessage) => {
     try {
-      // Firebase kimlik doğrulama token'ını al
-      const token = await user.getIdToken();
+      // İnternet bağlantısı kontrolü
+      if (!navigator.onLine) {
+        throw new Error('İnternet bağlantısı yok. Lütfen bağlantınızı kontrol edin.');
+      }
       
-      const response = await fetch(`${API_URL}/api/chat`, {
+      // Firebase kimlik doğrulama token'ını al
+      let token = '';
+      try {
+        token = await getFirebaseToken(true); // Context'ten gelen fonksiyonu kullan
+        console.log('Firebase token başarıyla alındı');
+      } catch (tokenError) {
+        console.error('Token alınırken hata oluştu:', tokenError);
+        throw new Error('Kimlik doğrulama hatası: ' + tokenError.message);
+      }
+      
+      console.log('API isteği gönderiliyor:', `${API_URL}/api/chat`);
+      
+      // Zaman aşımı kontrolü
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('API yanıt zaman aşımı. Sunucu yanıt vermiyor.')), 30000)
+      );
+      
+      const fetchPromise = fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -422,11 +562,16 @@ const Chat = () => {
         })
       });
       
+      const response = await Promise.race([fetchPromise, timeout]);
+      
       if (!response.ok) {
-        throw new Error(`API hatası: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API yanıt hatası:', response.status, errorData);
+        throw new Error(`API hatası: ${response.status} - ${errorData.detail || 'Bilinmeyen hata'}`);
       }
       
       const data = await response.json();
+      console.log('AI yanıtı alındı:', data);
       return {
         text: data.message || "Üzgünüm, bir yanıt oluşturulamadı.",
         analysis: data.analysis || "",
@@ -455,10 +600,18 @@ const Chat = () => {
       }));
       
       // Firebase kimlik doğrulama token'ını al
-      const token = await user.getIdToken();
+      let token = '';
+      try {
+        token = await getFirebaseToken(); // Context'ten gelen fonksiyonu kullan
+      } catch (tokenError) {
+        console.error('Geri bildirim için token alınamadı:', tokenError);
+        return;
+      }
+      
+      console.log('Geri bildirim gönderiliyor', { messageId, score });
       
       // Geri bildirimi API'ye gönder
-      const response = await fetch(`${API_URL}/api/learn`, {
+      const feedbackResponse = await fetch(`${API_URL}/api/learn`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -474,12 +627,64 @@ const Chat = () => {
         })
       });
       
-      if (!response.ok) {
-        console.error('Geri bildirim gönderilirken API hatası oluştu');
+      if (!feedbackResponse.ok) {
+        const errorData = await feedbackResponse.json().catch(() => ({}));
+        console.error('Geri bildirim gönderilirken API hatası:', feedbackResponse.status, errorData);
+      } else {
+        console.log('Geri bildirim başarıyla gönderildi');
       }
       
     } catch (error) {
       console.error('Geri bildirim gönderilirken hata oluştu:', error);
+    }
+  };
+  
+  // API bağlantısını yeniden dene
+  const retryApiConnection = async () => {
+    setRetryCount(prev => prev + 1);
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const isConnected = await checkApiConnection();
+      
+      if (isConnected) {
+        setLoading(false);
+        
+        // Yeniden mesaj göndermeyi dene
+        if (messages.length > 0 && messages[messages.length - 1].isUser) {
+          try {
+            const lastUserMessage = messages[messages.length - 1].text;
+            const aiResponseData = await getAIResponse(lastUserMessage);
+            
+            const aiMessage = {
+              text: aiResponseData.text,
+              isUser: false,
+              timestamp: new Date().toISOString(),
+              analysis: aiResponseData.analysis,
+              context: aiResponseData.context,
+              code_blocks: aiResponseData.code_blocks,
+              security_insights: aiResponseData.security_insights
+            };
+            
+            const conversationRef = doc(db, 'conversations', chatId);
+            await updateDoc(conversationRef, {
+              messages: [...messages, aiMessage],
+              updatedAt: new Date().toISOString()
+            });
+            
+          } catch (error) {
+            console.error('Yeniden gönderim sırasında hata:', error);
+            setError('Yeniden gönderim sırasında hata oluştu: ' + error.message);
+          }
+        }
+      } else {
+        setLoading(false);
+        setError('API sunucusuna bağlantı kurulamadı. Lütfen daha sonra tekrar deneyin.');
+      }
+    } catch (error) {
+      setLoading(false);
+      setError('Bağlantı yeniden sağlanamadı: ' + error.message);
     }
   };
   
@@ -600,40 +805,73 @@ const Chat = () => {
   
   // Mesaj bileşeni
   const Message = ({ message, index }) => {
-    const { text, isUser, timestamp, analysis, context } = message;
-    const messageId = `msg-${index}-${timestamp}`;
-    const hasAnalysis = analysis && analysis.length > 0;
-    const hasContext = context && Object.keys(context).length > 0;
+    if (!message) {
+      console.error(`Geçersiz mesaj verisi, indeks: ${index}`);
+      return null;
+    }
+    
+    const { text, isUser, timestamp, analysis, context, code_blocks, security_insights, error } = message;
+    const messageId = `msg-${index}-${timestamp || Date.now()}`;
+    const hasAnalysis = analysis && typeof analysis === 'string' && analysis.length > 0;
+    const hasContext = context && typeof context === 'object' && Object.keys(context).length > 0;
+    const hasCodeBlocks = Array.isArray(code_blocks) && code_blocks.length > 0;
+    const hasSecurityInsights = security_insights && typeof security_insights === 'string' && security_insights.length > 0;
+    const isErrorMessage = !!error;
     
     return (
       <MessageWrapper isUser={isUser}>
         <div>
-          <MessageBubble isUser={isUser}>
-            {text}
+          <MessageBubble isUser={isUser} error={isErrorMessage}>
+            {text || 'Boş mesaj'}
+            
+            {/* Kod blokları varsa göster */}
+            {hasCodeBlocks && (
+              <div className="code-blocks">
+                {code_blocks.map((block, i) => (
+                  <pre key={i} className="code-block">
+                    <code>{block}</code>
+                  </pre>
+                ))}
+              </div>
+            )}
+            
+            {/* Güvenlik değerlendirmesi varsa göster */}
+            {hasSecurityInsights && (
+              <div className="security-insights">
+                <h4>Güvenlik Değerlendirmesi:</h4>
+                <p>{security_insights}</p>
+              </div>
+            )}
+            
+            {/* Analiz veya bağlam bilgisi varsa göster */}
             {(hasAnalysis || hasContext) && (
               <MessageAnalysis>
                 {hasContext && context.emotion && <span>Duygu: {context.emotion} </span>}
+                {hasContext && Array.isArray(context.topics) && context.topics.length > 0 && (
+                  <span>Konular: {context.topics.join(', ')} </span>
+                )}
                 {hasAnalysis && <span>{analysis}</span>}
               </MessageAnalysis>
             )}
           </MessageBubble>
           
           <MessageTime isUser={isUser}>
-            {formatTime(timestamp)}
+            {formatTime(timestamp || Date.now())}
           </MessageTime>
           
-          {!isUser && (
+          {/* Sadece AI mesajları için geri bildirim butonları göster */}
+          {!isUser && !isErrorMessage && (
             <FeedbackButtons>
               <FeedbackButton 
                 positive
                 className={feedbackState[messageId] === 5 ? 'active' : ''}
-                onClick={() => sendFeedback(messageId, messages[index-1]?.text, text, 5)}
+                onClick={() => sendFeedback(messageId, messages[index-1]?.text || '', text || '', 5)}
               >
                 <FaThumbsUp /> Yararlı
               </FeedbackButton>
               <FeedbackButton 
                 className={feedbackState[messageId] === 1 ? 'active' : ''}
-                onClick={() => sendFeedback(messageId, messages[index-1]?.text, text, 1)}
+                onClick={() => sendFeedback(messageId, messages[index-1]?.text || '', text || '', 1)}
               >
                 <FaThumbsDown /> Yararlı değil
               </FeedbackButton>
@@ -643,6 +881,20 @@ const Chat = () => {
       </MessageWrapper>
     );
   };
+  
+  // Hata oluştuğunda görüntülenecek içerik
+  const renderErrorContent = () => (
+    <ErrorContainer>
+      <FaExclamationTriangle size={40} />
+      <h2>Bir hata oluştu</h2>
+      <p>{error}</p>
+      {retryCount < 3 && (
+        <RetryButton onClick={retryApiConnection}>
+          <FaWifi /> Yeniden Dene
+        </RetryButton>
+      )}
+    </ErrorContainer>
+  );
   
   // chatId yok veya "new" ise, boş içerik göster
   if (!chatId || chatId === "new") {
@@ -671,10 +923,7 @@ const Chat = () => {
         <ChatHeader>
           <h1>CesAI</h1>
         </ChatHeader>
-        <ErrorContainer>
-          <h2>Bir hata oluştu</h2>
-          <p>{error}</p>
-        </ErrorContainer>
+        {renderErrorContent()}
       </ChatContainer>
     );
   }
@@ -697,6 +946,19 @@ const Chat = () => {
     <ChatContainer>
       <ChatHeader>
         <h1>{conversation ? conversation.title : 'CesAI'}</h1>
+        {showConnectionStatus && (
+          <ConnectionStatus offline={isOffline} visible={showConnectionStatus}>
+            {isOffline ? (
+              <>
+                <FaWifi /> Çevrimdışı
+              </>
+            ) : (
+              <>
+                <FaWifi /> Bağlandı
+              </>
+            )}
+          </ConnectionStatus>
+        )}
       </ChatHeader>
       
       <MessagesContainer ref={messagesContainerRef}>
