@@ -440,6 +440,19 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = 'https://cesai-production.up.railway.app';
 
+// CORS Proxy'leri devre dışı bırakıldı çünkü sorun çıkarıyor
+// const CORS_PROXIES = [
+//   'https://cors-anywhere.herokuapp.com/',
+//   'https://api.allorigins.win/raw?url='
+// ];
+
+// // Proxy ile URL oluşturma
+// const getProxiedUrl = (url) => {
+//   // Rastgele bir proxy seç
+//   const proxy = CORS_PROXIES[0];
+//   return proxy + encodeURIComponent(url);
+// };
+
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
   console.log(`API çağrısı yapılıyor: ${method} ${API_URL}${endpoint}`);
@@ -451,12 +464,10 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Origin': window.location.origin
+        'X-Requested-With': 'XMLHttpRequest'
       },
-      mode: 'cors',
-      signal: AbortSignal.timeout(timeoutMs),
-      credentials: 'include'
+      mode: 'cors', // CORS ayarlarını kullan
+      signal: AbortSignal.timeout(timeoutMs)
     };
     
     // POST, PUT gibi metotlar için içerik ekle
@@ -469,11 +480,11 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     
-    // API'ye istek yap
+    // Doğrudan API'ye istek yap
     console.log('API isteği yapılıyor:', `${API_URL}${endpoint}`);
     const response = await fetch(`${API_URL}${endpoint}`, config);
     
-    // Normal yanıt kontrolü
+    // Yanıtı kontrol et ve döndür
     if (response.ok) {
       if (method === 'GET' || method === 'POST') {
         try {
@@ -570,9 +581,9 @@ const Chat = () => {
     if (!id || id === 'new' || !user) return null;
     
     try {
-      setLoadingConversation(true);
-      setError(null);
-      
+    setLoadingConversation(true);
+    setError(null);
+    
       // Firestore'dan sohbet verisini al
       const conversationRef = doc(db, "conversations", id);
       console.log(`Sohbet ID '${id}' için veri alınıyor...`);
@@ -582,7 +593,7 @@ const Chat = () => {
       if (!docSnap.exists()) {
         console.error(`Sohbet ID '${id}' bulunamadı.`);
         setNotFound(true);
-        setLoadingConversation(false);
+          setLoadingConversation(false);
         return null;
       }
       
@@ -591,11 +602,11 @@ const Chat = () => {
       // Kullanıcıya ait olup olmadığını kontrol et
       if (data.userId !== user.uid) {
         console.error(`Sohbet '${id}' bu kullanıcıya ait değil.`);
-        setNotFound(true);
+            setNotFound(true);
         setLoadingConversation(false);
         return null;
-      }
-      
+          }
+          
       // Realtime güncelleme için onSnapshot kullanılıyor
       const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -628,14 +639,14 @@ const Chat = () => {
       }, (error) => {
         console.error("Realtime update hatası:", error);
         setError(`Sohbet verileri dinlenirken hata oluştu: ${error.message}`);
-        setLoadingConversation(false);
-      });
-      
+          setLoadingConversation(false);
+        });
+        
       return unsubscribe;
-    } catch (error) {
+      } catch (error) {
       console.error("Sohbet yükleme hatası:", error);
       setError(`Sohbet yüklenirken bir hata oluştu: ${error.message}`);
-      setLoadingConversation(false);
+        setLoadingConversation(false);
       return null;
     }
   };
@@ -812,34 +823,6 @@ const Chat = () => {
       setApiStatus('connected');
       
       const data = result.data;
-      
-      // AI yanıtını Firestore'a ekle
-      if (data && data.response) {
-        const aiMessage = {
-          id: Date.now().toString(),
-          text: data.response,
-          isUser: false,
-          timestamp: new Date().toISOString(),
-          analysis: data.analysis || null,
-          context: data.context || null,
-          code_blocks: data.code_blocks || [],
-          security_insights: data.security_insights || null
-        };
-        
-        try {
-          // Firestore'daki mesajları güncelle
-          const conversationRef = doc(db, 'conversations', currentChatId);
-          await updateDoc(conversationRef, {
-            messages: arrayUnion(aiMessage),
-            updatedAt: new Date().toISOString()
-          });
-          
-          console.log('AI yanıtı veritabanına kaydedildi');
-        } catch (dbError) {
-          console.error('AI yanıtı veritabanına kaydedilemedi:', dbError);
-        }
-      }
-      
       return {
         text: data.response || data.message || '',
         analysis: data.analysis || null,
@@ -921,7 +904,7 @@ const Chat = () => {
             
             const aiMessage = {
               text: aiResponseData.text,
-              isUser: false,
+          isUser: false,
               timestamp: new Date().toISOString(),
               analysis: aiResponseData.analysis,
               context: aiResponseData.context,
@@ -930,11 +913,11 @@ const Chat = () => {
             };
             
             const conversationRef = doc(db, 'conversations', currentChatId);
-            await updateDoc(conversationRef, {
+        await updateDoc(conversationRef, {
               messages: [...messages, aiMessage],
-              updatedAt: new Date().toISOString()
-            });
-            
+          updatedAt: new Date().toISOString()
+        });
+        
           } catch (error) {
             console.error('Yeniden gönderim sırasında hata:', error);
             setError('Yeniden gönderim sırasında hata oluştu: ' + error.message);
@@ -1023,19 +1006,19 @@ const Chat = () => {
           id: Date.now().toString(),
           text: userMessage,
           isUser: true,
-          timestamp: new Date().toISOString()
-        };
-        
+        timestamp: new Date().toISOString()
+      };
+      
         // Önce local state'i güncelle (UI daha hızlı tepki versin)
         setMessages(prevMessages => [...prevMessages, userMessageObj]);
-        
-        try {
+      
+      try {
           // Firestore'daki mesajları güncelle
           const conversationRef = doc(db, 'conversations', currentId);
-          await updateDoc(conversationRef, {
+        await updateDoc(conversationRef, {
             messages: arrayUnion(userMessageObj),
-            updatedAt: new Date().toISOString()
-          });
+          updatedAt: new Date().toISOString()
+        });
         } catch (updateError) {
           console.error("Mesaj Firestore'a kaydedilirken hata:", updateError);
           // Firestore hatası olsa da devam et, kullanıcı mesajı görüntülenmeye devam eder
@@ -1050,7 +1033,8 @@ const Chat = () => {
       // API yanıtını al (yeni ya da mevcut sohbet için)
       if (!initialMessage || currentId) {
         try {
-          await sendMessage(userMessage);
+          const response = await sendMessage(userMessage);
+          console.log("API yanıtı alındı:", response);
         } catch (apiError) {
           console.error("API yanıtı alınırken hata:", apiError);
           setError("API yanıtı alınamadı: " + apiError.message);
@@ -1243,6 +1227,7 @@ const Chat = () => {
     try {
       setApiStatus('connecting');
       
+      // Doğrudan API'ye istek yap
       console.log('API bağlantısını kontrol ediyorum...');
       
       try {
@@ -1250,11 +1235,9 @@ const Chat = () => {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Origin': window.location.origin
+            'X-Requested-With': 'XMLHttpRequest'
           },
-          mode: 'cors',
-          credentials: 'include',
+          mode: 'cors', // CORS ayarlarını kullan
           signal: AbortSignal.timeout(5000)
         });
         
@@ -1263,104 +1246,17 @@ const Chat = () => {
           setApiStatus('connected');
           return true;
         } else {
+          console.warn(`API yanıt kodu: ${healthResponse.status}`);
           throw new Error(`Sunucu yanıt verdi, fakat durum kodu: ${healthResponse.status}`);
         }
       } catch (fetchError) {
-        console.error('API bağlantısı hatası:', fetchError);
+        console.error('Doğrudan API bağlantısı hatası:', fetchError);
         throw fetchError;
       }
     } catch (error) {
       console.error('API bağlantı kontrolü başarısız:', error.message);
       setApiStatus('error');
       return false;
-    }
-  };
-  
-  // Dosya yükleme fonksiyonu
-  const handleFileUpload = async (file) => {
-    if (!file) return null;
-    
-    try {
-      setLoading(true);
-      
-      // Firebase kimlik doğrulama token'ını al
-      let token = '';
-      try {
-        token = await getFirebaseToken();
-      } catch (tokenError) {
-        console.error('Dosya yükleme için token alınamadı:', tokenError);
-        throw new Error('Kimlik doğrulama başarısız');
-      }
-      
-      // Dosya türünü kontrol et
-      const isImage = file.type.startsWith('image/');
-      const isPdf = file.type === 'application/pdf';
-      const isDoc = file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      
-      // Desteklenen dosya türü değilse hata ver
-      if (!isImage && !isPdf && !isDoc) {
-        throw new Error('Desteklenmeyen dosya türü. Lütfen resim, PDF veya Word belgesi yükleyin.');
-      }
-      
-      // FormData oluştur
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('conversation_id', currentChatId);
-      
-      console.log('Dosya yükleniyor...');
-      
-      // Dosya yükleme isteği
-      const response = await fetch(`${API_URL}/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: formData,
-        signal: AbortSignal.timeout(30000)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Dosya yükleme hatası: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('Dosya yükleme başarılı:', data);
-      
-      // Kullanıcı mesajı olarak dosya referansını ekle
-      let fileUrl = data.file_url || '';
-      let fileType = isImage ? 'image' : isPdf ? 'pdf' : 'document';
-      
-      const userMessage = {
-        id: Date.now().toString(),
-        text: `[${fileType}](${fileUrl})`,
-        isUser: true,
-        timestamp: new Date().toISOString(),
-        attachment: {
-          type: fileType,
-          url: fileUrl
-        }
-      };
-      
-      // Firestore'a ekleme
-      const conversationRef = doc(db, 'conversations', currentChatId);
-      await updateDoc(conversationRef, {
-        messages: arrayUnion(userMessage),
-        updatedAt: new Date().toISOString()
-      });
-      
-      // API yanıtını al
-      const aiResponseData = await sendMessage(`[${fileType} analizi]`);
-      
-      console.log("Dosya analizi yanıtı:", aiResponseData);
-      
-      return fileUrl;
-    } catch (error) {
-      console.error('Dosya yüklemesi sırasında hata:', error);
-      setError('Dosya yüklenemedi: ' + error.message);
-      return null;
-    } finally {
-      setLoading(false);
     }
   };
   
@@ -1462,20 +1358,7 @@ const Chat = () => {
       </MessagesContainer>
       
       <InputContainer onSubmit={handleSubmit}>
-        <input
-          type="file"
-          id="fileInput"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleFileUpload(e.target.files[0]);
-            }
-          }}
-        />
-        <AttachButton 
-          type="button" 
-          onClick={() => document.getElementById('fileInput').click()}
-        >
+        <AttachButton type="button">
           <FaPaperclip />
         </AttachButton>
         <Input
