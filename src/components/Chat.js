@@ -526,23 +526,6 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
   }
 };
 
-// API bağlantısını kontrol eden fonksiyon
-const checkApiConnection = async () => {
-  setApiStatus('connecting');
-  
-  const result = await callApi('/health', 'GET', null, null, 5000);
-  
-  if (result.success) {
-    console.log('API bağlantısı başarılı');
-    setApiStatus('connected');
-    return true;
-  } else {
-    console.error('API bağlantı kontrolü başarısız:', result.message);
-    setApiStatus('error');
-    return false;
-  }
-};
-
 // Chat Component
 const Chat = () => {
   const { chatId } = useParams();
@@ -801,6 +784,23 @@ const Chat = () => {
         };
       }
     });
+  };
+  
+  // API bağlantısını kontrol eden fonksiyon
+  const checkApiConnection = async () => {
+    setApiStatus('connecting');
+    
+    const result = await callApi('/health', 'GET', null, null, 5000);
+    
+    if (result.success) {
+      console.log('API bağlantısı başarılı');
+      setApiStatus('connected');
+      return true;
+    } else {
+      console.error('API bağlantı kontrolü başarısız:', result.message);
+      setApiStatus('error');
+      return false;
+    }
   };
   
   // Mesaj gönderme fonksiyonu
