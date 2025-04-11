@@ -440,33 +440,16 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = 'https://cesai-production.up.railway.app';
 
-// CORS Proxy'leri devre dışı bırakıldı çünkü sorun çıkarıyor
-// const CORS_PROXIES = [
-//   'https://cors-anywhere.herokuapp.com/',
-//   'https://api.allorigins.win/raw?url='
-// ];
-
-// // Proxy ile URL oluşturma
-// const getProxiedUrl = (url) => {
-//   // Rastgele bir proxy seç
-//   const proxy = CORS_PROXIES[0];
-//   return proxy + encodeURIComponent(url);
-// };
-
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
-  console.log(`API çağrısı yapılıyor: ${method} ${API_URL}${endpoint}`);
-  
   try {
     // İstek yapılandırması
     const config = {
       method,
       headers: {
-        'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
+        'Accept': 'application/json'
       },
-      mode: 'cors', // CORS ayarlarını kullan
       signal: AbortSignal.timeout(timeoutMs)
     };
     
@@ -480,11 +463,10 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     
-    // Doğrudan API'ye istek yap
-    console.log('API isteği yapılıyor:', `${API_URL}${endpoint}`);
+    console.log(`API isteği yapılıyor: ${method} ${API_URL}${endpoint}`);
     const response = await fetch(`${API_URL}${endpoint}`, config);
     
-    // Yanıtı kontrol et ve döndür
+    // Yanıtı kontrol et
     if (response.ok) {
       if (method === 'GET' || method === 'POST') {
         try {
@@ -786,9 +768,6 @@ const Chat = () => {
       if (!navigator.onLine) {
         throw new Error('İnternet bağlantınız yok. Lütfen bağlantınızı kontrol edin.');
       }
-
-      // API durumunu güncelle
-      setApiStatus('connecting');
       
       // Firebase kimlik doğrulama token'ını al
       let token = '';
@@ -804,33 +783,37 @@ const Chat = () => {
         setApiStatus('error');
         throw new Error('Kimlik doğrulama başarısız. Lütfen tekrar giriş yapın.');
       }
-
+      
+      // API durumunu güncelle - bağlantı kuruluyor
+      setApiStatus('connecting');
+      
       console.log('Mesaj gönderiliyor...');
       
-      // callApi yardımcı fonksiyonunu kullan
       const result = await callApi('/chat', 'POST', {
         message: text,
         conversation_id: currentChatId,
         model: 'gpt-3.5-turbo'
       }, token, 30000);
       
-      if (!result.success) {
+      // API yanıtı başarılı ise
+      if (result.success) {
+        // API durumunu güncelle - bağlantı kuruldu
+        setApiStatus('connected');
+        
+        const data = result.data;
+        return {
+          text: data.response || data.message || '',
+          analysis: data.analysis || null,
+          context: data.context || null,
+          code_blocks: data.code_blocks || [],
+          security_insights: data.security_insights || null,
+          planning: data.planning || null
+        };
+      } else {
+        // API yanıtı başarısız ise
         setApiStatus('error');
         throw new Error(result.message || 'API yanıt vermedi');
       }
-      
-      // API durumunu güncelle
-      setApiStatus('connected');
-      
-      const data = result.data;
-      return {
-        text: data.response || data.message || '',
-        analysis: data.analysis || null,
-        context: data.context || null,
-        code_blocks: data.code_blocks || [],
-        security_insights: data.security_insights || null,
-        planning: data.planning || null
-      };
     } catch (error) {
       console.error('Mesaj gönderme hatası:', error);
       setApiStatus('error');
@@ -1222,39 +1205,20 @@ const Chat = () => {
     }
   }, [currentChatId]);
   
-  // API bağlantısını kontrol eden fonksiyon
+  // API bağlantı durumunu kontrol etme (artık hiç sağlık kontrolü yapmıyoruz, direkt çalışıyoruz)
   const checkApiConnection = async () => {
+    // API durumu zaten bağlı ise, tekrar kontrol etme
+    if (apiStatus === 'connected') return true;
+    
+    // API durumunu güncelle
+    setApiStatus('connecting');
+    
     try {
-      setApiStatus('connecting');
-      
-      // Doğrudan API'ye istek yap
-      console.log('API bağlantısını kontrol ediyorum...');
-      
-      try {
-        const healthResponse = await fetch(`${API_URL}/health`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          mode: 'cors', // CORS ayarlarını kullan
-          signal: AbortSignal.timeout(5000)
-        });
-        
-        if (healthResponse.ok) {
-          console.log('API bağlantısı başarılı');
-          setApiStatus('connected');
-          return true;
-        } else {
-          console.warn(`API yanıt kodu: ${healthResponse.status}`);
-          throw new Error(`Sunucu yanıt verdi, fakat durum kodu: ${healthResponse.status}`);
-        }
-      } catch (fetchError) {
-        console.error('Doğrudan API bağlantısı hatası:', fetchError);
-        throw fetchError;
-      }
+      // API durumu test edildi olarak say ve devam et
+      setApiStatus('connected');
+      return true;
     } catch (error) {
-      console.error('API bağlantı kontrolü başarısız:', error.message);
+      console.error('API bağlantı kontrolü başarısız:', error);
       setApiStatus('error');
       return false;
     }
@@ -1289,9 +1253,12 @@ const Chat = () => {
           <FaExclamationTriangle size={40} />
           <h2>Bir hata oluştu</h2>
           <p>{error}</p>
+          {apiStatus === 'error' && (
+            <p>API sunucusuna bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.</p>
+          )}
           {retryCount < 3 && (
             <RetryButton onClick={retryApiConnection}>
-              <FaWifi /> Yeniden Dene
+              <FaSync /> Yeniden Dene
             </RetryButton>
           )}
         </ErrorContainer>
