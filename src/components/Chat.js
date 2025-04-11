@@ -440,19 +440,6 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = 'https://cesai-production.up.railway.app';
 
-// CORS Proxy'leri devre dışı bırakıldı çünkü sorun çıkarıyor
-// const CORS_PROXIES = [
-//   'https://cors-anywhere.herokuapp.com/',
-//   'https://api.allorigins.win/raw?url='
-// ];
-
-// // Proxy ile URL oluşturma
-// const getProxiedUrl = (url) => {
-//   // Rastgele bir proxy seç
-//   const proxy = CORS_PROXIES[0];
-//   return proxy + encodeURIComponent(url);
-// };
-
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
   console.log(`API çağrısı yapılıyor: ${method} ${API_URL}${endpoint}`);
@@ -466,7 +453,7 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest'
       },
-      mode: 'no-cors', // no-cors modu CORS hatalarını engelleyecek
+      mode: 'cors', // CORS hatalarını düzeltmek için no-cors yerine cors kullanıyoruz
       signal: AbortSignal.timeout(timeoutMs)
     };
     
@@ -483,12 +470,6 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
     // Doğrudan API'ye istek yap
     console.log('API isteği yapılıyor:', `${API_URL}${endpoint}`);
     const response = await fetch(`${API_URL}${endpoint}`, config);
-    
-    // no-cors modunda response opaque olacak, bu nedenle başarılı kabul edelim
-    if (config.mode === 'no-cors') {
-      console.log('no-cors modu kullanıldı, yanıt opaque olacak - başarılı kabul ediliyor');
-      return { success: true, data: {} };
-    }
     
     // Normal yanıt kontrolü
     if (response.ok) {
@@ -829,6 +810,34 @@ const Chat = () => {
       setApiStatus('connected');
       
       const data = result.data;
+      
+      // AI yanıtını Firestore'a ekle
+      if (data && data.response) {
+        const aiMessage = {
+          id: Date.now().toString(),
+          text: data.response,
+          isUser: false,
+          timestamp: new Date().toISOString(),
+          analysis: data.analysis || null,
+          context: data.context || null,
+          code_blocks: data.code_blocks || [],
+          security_insights: data.security_insights || null
+        };
+        
+        try {
+          // Firestore'daki mesajları güncelle
+          const conversationRef = doc(db, 'conversations', currentChatId);
+          await updateDoc(conversationRef, {
+            messages: arrayUnion(aiMessage),
+            updatedAt: new Date().toISOString()
+          });
+          
+          console.log('AI yanıtı veritabanına kaydedildi');
+        } catch (dbError) {
+          console.error('AI yanıtı veritabanına kaydedilemedi:', dbError);
+        }
+      }
+      
       return {
         text: data.response || data.message || '',
         analysis: data.analysis || null,
@@ -1039,8 +1048,7 @@ const Chat = () => {
       // API yanıtını al (yeni ya da mevcut sohbet için)
       if (!initialMessage || currentId) {
         try {
-          const response = await sendMessage(userMessage);
-          console.log("API yanıtı alındı:", response);
+          await sendMessage(userMessage);
         } catch (apiError) {
           console.error("API yanıtı alınırken hata:", apiError);
           setError("API yanıtı alınamadı: " + apiError.message);
@@ -1243,14 +1251,17 @@ const Chat = () => {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
           },
-          mode: 'no-cors', // no-cors modu CORS hatalarını engelleyecek
+          mode: 'cors', // CORS hatalarını düzeltmek için no-cors yerine cors kullanıyoruz
           signal: AbortSignal.timeout(5000)
         });
         
-        // no-cors modunda her zaman opaque response olur, başarılı kabul edelim
-        console.log('API bağlantısı kontrol edildi (no-cors)');
-        setApiStatus('connected');
-        return true;
+        if (healthResponse.ok) {
+          console.log('API bağlantısı başarılı');
+          setApiStatus('connected');
+          return true;
+        } else {
+          throw new Error(`Sunucu yanıt verdi, fakat durum kodu: ${healthResponse.status}`);
+        }
       } catch (fetchError) {
         console.error('Doğrudan API bağlantısı hatası:', fetchError);
         throw fetchError;
@@ -1259,6 +1270,94 @@ const Chat = () => {
       console.error('API bağlantı kontrolü başarısız:', error.message);
       setApiStatus('error');
       return false;
+    }
+  };
+  
+  // Dosya yükleme fonksiyonu
+  const handleFileUpload = async (file) => {
+    if (!file) return null;
+    
+    try {
+      setLoading(true);
+      
+      // Firebase kimlik doğrulama token'ını al
+      let token = '';
+      try {
+        token = await getFirebaseToken();
+      } catch (tokenError) {
+        console.error('Dosya yükleme için token alınamadı:', tokenError);
+        throw new Error('Kimlik doğrulama başarısız');
+      }
+      
+      // Dosya türünü kontrol et
+      const isImage = file.type.startsWith('image/');
+      const isPdf = file.type === 'application/pdf';
+      const isDoc = file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      
+      // Desteklenen dosya türü değilse hata ver
+      if (!isImage && !isPdf && !isDoc) {
+        throw new Error('Desteklenmeyen dosya türü. Lütfen resim, PDF veya Word belgesi yükleyin.');
+      }
+      
+      // FormData oluştur
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('conversation_id', currentChatId);
+      
+      console.log('Dosya yükleniyor...');
+      
+      // Dosya yükleme isteği
+      const response = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData,
+        signal: AbortSignal.timeout(30000)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Dosya yükleme hatası: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Dosya yükleme başarılı:', data);
+      
+      // Kullanıcı mesajı olarak dosya referansını ekle
+      let fileUrl = data.file_url || '';
+      let fileType = isImage ? 'image' : isPdf ? 'pdf' : 'document';
+      
+      const userMessage = {
+        id: Date.now().toString(),
+        text: `[${fileType}](${fileUrl})`,
+        isUser: true,
+        timestamp: new Date().toISOString(),
+        attachment: {
+          type: fileType,
+          url: fileUrl
+        }
+      };
+      
+      // Firestore'a ekleme
+      const conversationRef = doc(db, 'conversations', currentChatId);
+      await updateDoc(conversationRef, {
+        messages: arrayUnion(userMessage),
+        updatedAt: new Date().toISOString()
+      });
+      
+      // API yanıtını al
+      const aiResponseData = await sendMessage(`[${fileType} analizi]`);
+      
+      console.log("Dosya analizi yanıtı:", aiResponseData);
+      
+      return fileUrl;
+    } catch (error) {
+      console.error('Dosya yüklemesi sırasında hata:', error);
+      setError('Dosya yüklenemedi: ' + error.message);
+      return null;
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -1360,7 +1459,20 @@ const Chat = () => {
       </MessagesContainer>
       
       <InputContainer onSubmit={handleSubmit}>
-        <AttachButton type="button">
+        <input
+          type="file"
+          id="fileInput"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            if (e.target.files && e.target.files[0]) {
+              handleFileUpload(e.target.files[0]);
+            }
+          }}
+        />
+        <AttachButton 
+          type="button" 
+          onClick={() => document.getElementById('fileInput').click()}
+        >
           <FaPaperclip />
         </AttachButton>
         <Input
