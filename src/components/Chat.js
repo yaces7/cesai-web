@@ -7,7 +7,7 @@ import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection, arrayUnion } from 'firebase/firestore';
 import { message } from 'antd';
 import { ReactMarkdown } from 'react-markdown/lib/react-markdown';
-import { auth } from '../firebase';
+import { auth } from '../firebase/config';
 
 // Styled Components
 const ChatContainer = styled.div`
