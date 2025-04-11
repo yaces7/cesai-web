@@ -438,18 +438,11 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 };
 
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
-const API_URL = 'https://cesai-production.up.railway.app';
+const API_URL = 'https://cors-anywhere.herokuapp.com/https://cesai-production.up.railway.app';
 
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
   console.log(`API çağrısı yapılıyor: ${method} ${API_URL}${endpoint}`);
-  
-  // Zaman aşımı kontrolü için controller
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-    console.log(`API çağrısı zaman aşımına uğradı: ${method} ${API_URL}${endpoint}`);
-  }, timeoutMs);
   
   try {
     // İstek yapılandırması
@@ -460,8 +453,7 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
         'Origin': window.location.origin
       },
       mode: 'cors',
-      credentials: 'omit',
-      signal: controller.signal
+      signal: AbortSignal.timeout(timeoutMs)
     };
     
     // POST, PUT gibi metotlar için içerik ekle
@@ -478,9 +470,6 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
     // İsteği gönder
     const response = await fetch(`${API_URL}${endpoint}`, config);
     
-    // Zaman aşımı kontrolünü temizle
-    clearTimeout(timeoutId);
-    
     // Yanıtı kontrol et ve döndür
     if (response.ok) {
       if (method === 'GET' || method === 'POST') {
@@ -492,36 +481,29 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
         }
       }
       return { success: true };
-    } else {
-      // Hata yanıtını JSON olarak almaya çalış
-      try {
-        const errorData = await response.json();
-        return { 
-          success: false, 
-          status: response.status, 
-          message: errorData.message || `API Hatası: ${response.status}`,
-          data: errorData
-        };
-      } catch (e) {
-        // JSON olarak işlenemezse sadece durum kodu ile hata döndür
-        return { 
-          success: false, 
-          status: response.status, 
-          message: `API Hatası: ${response.status}`
-        };
-      }
     }
-  } catch (error) {
-    // Zaman aşımı kontrolünü temizle
-    clearTimeout(timeoutId);
     
-    // Hata nesnesi döndür
+    // API hatası
+    let errorMessage = `API Hatası: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorMessage;
+    } catch (e) {
+      // JSON parse hatası
+    }
+    
     return { 
       success: false, 
-      message: error.name === 'AbortError' 
+      status: response.status, 
+      message: errorMessage
+    };
+  } catch (error) {
+    console.error('API isteği sırasında hata:', error);
+    return { 
+      success: false, 
+      message: error.name === 'TimeoutError' || error.name === 'AbortError'
         ? 'İstek zaman aşımına uğradı'
-        : `API İsteği Hatası: ${error.message}`,
-      error
+        : `API İsteği Hatası: ${error.message}`
     };
   }
 };
@@ -679,28 +661,25 @@ const Chat = () => {
   
   // İnternet bağlantısı durumunu izle
   useEffect(() => {
-    let interval;
-    
-    // Başlangıçta bir kez çalıştır
-    const checkInitialConnection = async () => {
+    // Başlangıçta kontrol et ve sonra periyodik olarak yeniden dene
+    const tryConnection = async () => {
       await checkApiConnection();
     };
     
-    checkInitialConnection();
+    tryConnection();
     
-    // Periyodik kontrol için zamanlayıcı oluştur
-    interval = setInterval(() => {
-      // Sadece hata durumunda tekrar kontrol et
-      if (apiStatus === 'error') {
-        checkApiConnection();
+    // Sayfada görünür olduğunda ve çevrimiçi olduğunda tekrar dene
+    window.addEventListener('online', tryConnection);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        tryConnection();
       }
-    }, 30000);
+    });
     
-    // Cleanup yaparken zamanlayıcıyı temizle
     return () => {
-      if (interval) clearInterval(interval);
+      window.removeEventListener('online', tryConnection);
     };
-  }, []); // Boş dependency array ile sadece bir kez çalıştır
+  }, []);
   
   // Mesajlar değiştiğinde aşağı kaydır
   useEffect(() => {
@@ -786,23 +765,6 @@ const Chat = () => {
     });
   };
   
-  // API bağlantısını kontrol eden fonksiyon
-  const checkApiConnection = async () => {
-    setApiStatus('connecting');
-    
-    const result = await callApi('/health', 'GET', null, null, 5000);
-    
-    if (result.success) {
-      console.log('API bağlantısı başarılı');
-      setApiStatus('connected');
-      return true;
-    } else {
-      console.error('API bağlantı kontrolü başarısız:', result.message);
-      setApiStatus('error');
-      return false;
-    }
-  };
-  
   // Mesaj gönderme fonksiyonu
   const sendMessage = async (text) => {
     try {
@@ -831,30 +793,44 @@ const Chat = () => {
 
       console.log('Mesaj gönderiliyor...');
       
-      // callApi yardımcı fonksiyonunu kullan
-      const result = await callApi('/chat', 'POST', {
-        message: text,
-        conversation_id: currentChatId,
-        model: 'gpt-3.5-turbo'
-      }, token, 30000);
-      
-      if (!result.success) {
+      // Doğrudan fetch kullan, proxy ile
+      try {
+        const response = await fetch(`${API_URL}/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'Origin': window.location.origin,
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: JSON.stringify({
+            message: text,
+            conversation_id: currentChatId,
+            model: 'gpt-3.5-turbo'
+          }),
+          mode: 'cors'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API hatası: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setApiStatus('connected');
+        
+        return {
+          text: data.response || data.message || '',
+          analysis: data.analysis || null,
+          context: data.context || null,
+          code_blocks: data.code_blocks || [],
+          security_insights: data.security_insights || null,
+          planning: data.planning || null
+        };
+      } catch (error) {
+        console.error('API isteği başarısız:', error);
         setApiStatus('error');
-        throw new Error(result.message || 'API yanıt vermedi');
+        throw error;
       }
-      
-      // API durumunu güncelle
-      setApiStatus('connected');
-      
-      const data = result.data;
-      return {
-        text: data.response || data.message || '',
-        analysis: data.analysis || null,
-        context: data.context || null,
-        code_blocks: data.code_blocks || [],
-        security_insights: data.security_insights || null,
-        planning: data.planning || null
-      };
     } catch (error) {
       console.error('Mesaj gönderme hatası:', error);
       setApiStatus('error');
@@ -1245,6 +1221,35 @@ const Chat = () => {
       setError(null);
     }
   }, [currentChatId]);
+  
+  // API bağlantısını kontrol eden fonksiyon
+  const checkApiConnection = async () => {
+    try {
+      setApiStatus('connecting');
+      
+      const response = await fetch(`${API_URL}/health`, {
+        method: 'GET',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Origin': window.location.origin
+        },
+        mode: 'cors',
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      if (response.ok) {
+        console.log('API bağlantısı başarılı');
+        setApiStatus('connected');
+        return true;
+      } else {
+        throw new Error(`Sunucu yanıt verdi, fakat durum kodu: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('API bağlantı kontrolü başarısız:', error.message);
+      setApiStatus('error');
+      return false;
+    }
+  };
   
   // Bileşen render kısmı
   // chatId yok veya "new" değilse, ve hiçbir conversation yüklenmemişse
