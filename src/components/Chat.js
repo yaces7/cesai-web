@@ -5,6 +5,8 @@ import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbs
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { message } from 'antd';
+import { ReactMarkdown } from 'react-markdown/lib/react-markdown';
 
 // Styled Components
 const ChatContainer = styled.div`
@@ -60,6 +62,21 @@ const MessagesContainer = styled.div`
     background: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
   }
+`;
+
+const MessageActions = styled.div`
+  position: absolute;
+  bottom: -30px;
+  ${props => props.isUser ? 'left: 0;' : 'right: 0;'}
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  z-index: 10;
 `;
 
 const MessageWrapper = styled.div`
@@ -307,44 +324,42 @@ const ErrorContainer = styled.div`
 
 const FeedbackButtons = styled.div`
   display: flex;
-  gap: 8px;
-  margin-top: 4px;
-  opacity: 0.6;
-  transition: opacity 0.2s;
-  
-  &:hover {
-    opacity: 1;
-  }
+  justify-content: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
 `;
 
 const FeedbackButton = styled.button`
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
+  background: transparent;
+  border: 1px solid ${props => props.positive ? 'var(--accent-color)' : 'var(--text-secondary)'};
+  color: ${props => props.positive ? 'var(--accent-color)' : 'var(--text-secondary)'};
+  border-radius: 1rem;
+  padding: 0.25rem 0.5rem;
   font-size: 0.7rem;
-  padding: 2px 4px;
-  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
   
   &:hover {
-    background: var(--bg-hover);
-    color: ${props => props.positive ? 'var(--accent-color)' : '#ff6b6b'};
+    background: ${props => props.positive ? 'rgba(100, 108, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)'};
   }
   
   &.active {
+    background: ${props => props.positive ? 'rgba(100, 108, 255, 0.2)' : 'rgba(255, 107, 107, 0.1)'};
+    border-color: ${props => props.positive ? 'var(--accent-color)' : '#ff6b6b'};
     color: ${props => props.positive ? 'var(--accent-color)' : '#ff6b6b'};
   }
 `;
 
 const MessageAnalysis = styled.div`
-  font-size: 0.75rem;
-  margin-top: 4px;
-  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
   font-style: italic;
-  max-width: 90%;
+  padding-top: 0.5rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
 `;
 
 const ConnectionStatus = styled.div`
@@ -380,21 +395,6 @@ const RetryButton = styled.button`
   &:hover {
     opacity: 0.9;
   }
-`;
-
-const MessageActions = styled.div`
-  position: absolute;
-  bottom: -30px;
-  ${props => props.isUser ? 'left: 0;' : 'right: 0;'}
-  display: flex;
-  gap: 8px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  background: var(--bg-secondary);
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: 1px solid var(--border-color);
-  z-index: 10;
 `;
 
 const ActionButton = styled.button`

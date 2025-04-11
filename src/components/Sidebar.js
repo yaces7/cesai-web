@@ -177,6 +177,15 @@ const ConversationDetails = styled.div`
   overflow: hidden;
 `;
 
+const ConversationIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  color: var(--text-secondary);
+  font-size: 14px;
+`;
+
 const ConversationTitle = styled.div`
   white-space: nowrap;
   overflow: hidden;
@@ -289,14 +298,6 @@ const RenameModalButton = styled.button`
     opacity: 0.9;
     transform: translateY(-1px);
   }
-`;
-
-const ConversationIcon = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 0.8rem;
-  color: var(--text-secondary);
 `;
 
 const ContextMenu = styled.div`
