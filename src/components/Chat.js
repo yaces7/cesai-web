@@ -825,8 +825,9 @@ const Chat = () => {
           // Mesajları güncelle
           setMessages([userMessage, aiMessage]);
           
-          // Yeni oluşturulan sohbete yönlendir
-          navigate(`/chat/${newChatId}`, { replace: true });
+          // Yeni oluşturulan sohbete yönlendir ve sayfayı yenileme sorunlarını önlemek için
+          // window.location.href kullanıyoruz
+          window.location.href = `/chat/${newChatId}`;
           
         } catch (apiError) {
           console.error('API yanıtı alınırken hata oluştu:', apiError);
@@ -840,7 +841,7 @@ const Chat = () => {
           };
           
           setMessages([userMessage, aiResponse]);
-          navigate(`/chat/${newChatId}`, { replace: true });
+          window.location.href = `/chat/${newChatId}`;
         }
         
         setLoading(false);
