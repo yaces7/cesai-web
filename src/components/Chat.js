@@ -438,7 +438,7 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 };
 
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
-const API_URL = 'https://cors-anywhere.herokuapp.com/https://cesai-production.up.railway.app';
+const API_URL = 'https://cesai-production.up.railway.app';
 
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
@@ -450,7 +450,8 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       method,
       headers: {
         'Accept': 'application/json',
-        'Origin': window.location.origin
+        'Origin': window.location.origin,
+        'X-Requested-With': 'XMLHttpRequest'
       },
       mode: 'cors',
       signal: AbortSignal.timeout(timeoutMs)
@@ -793,44 +794,30 @@ const Chat = () => {
 
       console.log('Mesaj gönderiliyor...');
       
-      // Doğrudan fetch kullan, proxy ile
-      try {
-        const response = await fetch(`${API_URL}/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-            'Origin': window.location.origin,
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          body: JSON.stringify({
-            message: text,
-            conversation_id: currentChatId,
-            model: 'gpt-3.5-turbo'
-          }),
-          mode: 'cors'
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API hatası: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        setApiStatus('connected');
-        
-        return {
-          text: data.response || data.message || '',
-          analysis: data.analysis || null,
-          context: data.context || null,
-          code_blocks: data.code_blocks || [],
-          security_insights: data.security_insights || null,
-          planning: data.planning || null
-        };
-      } catch (error) {
-        console.error('API isteği başarısız:', error);
+      // callApi yardımcı fonksiyonunu kullan
+      const result = await callApi('/chat', 'POST', {
+        message: text,
+        conversation_id: currentChatId,
+        model: 'gpt-3.5-turbo'
+      }, token, 30000);
+      
+      if (!result.success) {
         setApiStatus('error');
-        throw error;
+        throw new Error(result.message || 'API yanıt vermedi');
       }
+      
+      // API durumunu güncelle
+      setApiStatus('connected');
+      
+      const data = result.data;
+      return {
+        text: data.response || data.message || '',
+        analysis: data.analysis || null,
+        context: data.context || null,
+        code_blocks: data.code_blocks || [],
+        security_insights: data.security_insights || null,
+        planning: data.planning || null
+      };
     } catch (error) {
       console.error('Mesaj gönderme hatası:', error);
       setApiStatus('error');
