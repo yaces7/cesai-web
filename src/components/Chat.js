@@ -1108,7 +1108,7 @@ const Chat = () => {
       </MessagesContainer>
       
       <InputContainer onSubmit={handleSubmit}>
-        <MessageInput
+        <Input
           type="text"
           placeholder="Bir mesaj yazın..."
           value={input}
