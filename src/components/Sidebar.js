@@ -490,60 +490,13 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       // Aktif sohbeti güncelle
       setActiveConversation(chatId);
       
-      // Önce sohbetin veritabanında tam olarak oluşması için biraz bekle
-      setTimeout(() => {
-        try {
-          // Sohbet sayfasına yönlendir
-          navigate(`/chat/${chatId}`);
-          console.log(`${chatId} ID'li sohbete yönlendirildi`);
-          
-          // Kısa bir süre sonra UI elemanlarını güncelle (DOM güncellemesi için)
-          setTimeout(() => {
-            try {
-              // DOM'da sohbet öğesini bul
-              const chatElement = document.getElementById(`chat-${chatId}`);
-              
-              if (chatElement) {
-                // Sohbet öğesini görünür alana getir
-                chatElement.scrollIntoView({ behavior: 'smooth' });
-                
-                // Vurgu ekle
-                chatElement.classList.add('highlight');
-                
-                // 1 saniye sonra vurguyu kaldır
-                setTimeout(() => {
-                  chatElement.classList.remove('highlight');
-                }, 1000);
-                
-                console.log(`Sohbet öğesi bulundu ve vurgulandı: chat-${chatId}`);
-              } else {
-                console.warn(`Sohbet öğesi DOM'da bulunamadı: chat-${chatId}`);
-                
-                // İkinci bir deneme yap (sayfanın DOM'unun güncellenmesi için biraz daha bekle)
-                setTimeout(() => {
-                  const retryElement = document.getElementById(`chat-${chatId}`);
-                  if (retryElement) {
-                    retryElement.scrollIntoView({ behavior: 'smooth' });
-                    console.log('Sohbet öğesi ikinci denemede bulundu');
-                  } else {
-                    console.warn('Sohbet öğesi ikinci denemede de bulunamadı');
-                  }
-                }, 1000);
-              }
-            } catch (domError) {
-              console.error('DOM işlemleri sırasında hata:', domError);
-            }
-          }, 500);
-        } catch (navError) {
-          console.error('Yönlendirme sırasında hata:', navError);
-          // Yönlendirme başarısız olduysa, sayfa yeniden yüklemeyi dene
-          window.location.href = `/chat/${chatId}`;
-        }
-      }, 300);
+      // Sayfanın her durumda tamamen yenilenmesi için window.location.href kullanıyoruz
+      console.log(`${chatId} ID'li sohbete yönlendiriliyor...`);
+      window.location.href = `/chat/${chatId}`;
       
     } catch (error) {
-      console.error('Sohbet oluşturulurken hata oluştu:', error);
-      setError('Sohbet oluşturulurken hata oluştu: ' + error.message);
+      console.error('Yeni sohbet oluşturulurken hata oluştu:', error);
+      setError('Sohbet oluşturulamadı: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -577,35 +530,15 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       // Aktif sohbeti güncelle
       setActiveConversation(id);
       
-      // Yönlendirme yapmadan önce biraz bekle - React state güncellemesi için
-      setTimeout(() => {
-        // Yönlendirme işlemini hata kontrolüyle yap
-        try {
-          console.log(`${id} ID'li sohbete yönlendiriliyor...`);
-          navigate(`/chat/${id}`);
-          
-          // Mobil görünümde sidebar'ı kapat
-          if (window.innerWidth <= 768) {
-            setShowSidebar(false);
-          }
-          
-          // Sohbet öğesini vurgula (yönlendirme sonrası)
-          setTimeout(() => {
-            const chatElement = document.getElementById(`chat-${id}`);
-            if (chatElement) {
-              chatElement.classList.add('highlight');
-              setTimeout(() => {
-                chatElement.classList.remove('highlight');
-              }, 500);
-            }
-          }, 500);
-        } catch (navError) {
-          console.error('Yönlendirme sırasında hata:', navError);
-          
-          // Son çare olarak window.location ile yönlendir
-          window.location.href = `/chat/${id}`;
-        }
-      }, 50);
+      // Tarayıcı yönlendirme API'sinin stale state sorunlarını önlemek için
+      // window.location.href kullanarak tam sayfa yenileme yapıyoruz
+      window.location.href = `/chat/${id}`;
+      
+      // Mobil görünümde sidebar'ı kapat
+      if (window.innerWidth <= 768) {
+        setShowSidebar(false);
+      }
+      
     } catch (error) {
       console.error('Sohbet yönlendirmesi yapılırken hata oluştu:', error);
       

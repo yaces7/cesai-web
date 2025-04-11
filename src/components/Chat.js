@@ -344,6 +344,14 @@ const Chat = () => {
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   
+  // URL'den chatId doğrudan al (useParams bazen eski değer dönebiliyor)
+  const urlChatId = window.location.pathname.includes('/chat/') 
+    ? window.location.pathname.split('/chat/')[1] 
+    : null;
+  
+  // Kullanılacak chatId, URL'den gelen veya useParams'tan gelen
+  const currentChatId = urlChatId || chatId;
+  
   // İnternet bağlantısı durumunu izle
   useEffect(() => {
     const handleOnline = () => {
@@ -429,10 +437,10 @@ const Chat = () => {
   
   // Firestore'dan sohbeti çek
   useEffect(() => {
-    if (!user || !chatId) return;
+    if (!user || !currentChatId) return;
     
     // Eğer chatId "new" ise, yükleme göstermeyin
-    if (chatId === "new") {
+    if (currentChatId === "new") {
       setConversation(null);
       setMessages([]);
       setNotFound(false);
@@ -441,18 +449,18 @@ const Chat = () => {
     
     setLoadingConversation(true);
     setError(null);
-    console.log(`Sohbet ID'si ${chatId} için veri çekiliyor...`);
+    console.log(`Sohbet ID'si ${currentChatId} için veri çekiliyor...`);
     
     const fetchConversation = async () => {
       try {
-        const conversationRef = doc(db, 'conversations', chatId);
+        const conversationRef = doc(db, 'conversations', currentChatId);
         console.log(`Veri çekiliyor: ${conversationRef.path}`);
         
         // Önce bir kere veriyi çekelim, sonra dinlemeye başlayalım
         const docSnap = await getDoc(conversationRef);
         
         if (!docSnap.exists()) {
-          console.error(`Sohbet ID'si ${chatId} bulunamadı.`);
+          console.error(`Sohbet ID'si ${currentChatId} bulunamadı.`);
           setNotFound(true);
           setLoadingConversation(false);
           return;
@@ -475,7 +483,7 @@ const Chat = () => {
         
         // Kullanıcıya ait sohbet mi kontrol et
         if (conversationData.userId !== user.uid) {
-          console.error(`Sohbet ID'si ${chatId} bu kullanıcıya ait değil. Beklenen: ${user.uid}, Bulunan: ${conversationData.userId}`);
+          console.error(`Sohbet ID'si ${currentChatId} bu kullanıcıya ait değil. Beklenen: ${user.uid}, Bulunan: ${conversationData.userId}`);
           setNotFound(true);
           setLoadingConversation(false);
           return;
@@ -518,7 +526,7 @@ const Chat = () => {
         // Şimdi gerçek zamanlı dinlemeye başlayalım
         const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
           if (!docSnap.exists()) {
-            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${chatId} bulunamadı.`);
+            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${currentChatId} bulunamadı.`);
             setNotFound(true);
             return;
           }
@@ -530,7 +538,7 @@ const Chat = () => {
           
           // Kullanıcıya ait sohbet mi kontrol et
           if (updatedConversationData.userId !== user.uid) {
-            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${chatId} bu kullanıcıya ait değil.`);
+            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${currentChatId} bu kullanıcıya ait değil.`);
             setNotFound(true);
             return;
           }
@@ -564,7 +572,7 @@ const Chat = () => {
     };
     
     fetchConversation();
-  }, [db, user, chatId, mesajCoz]);
+  }, [db, user, currentChatId, mesajCoz]);
   
   // Mesajlar değiştiğinde aşağı kaydır
   useEffect(() => {
@@ -630,7 +638,7 @@ const Chat = () => {
         },
         body: JSON.stringify({
           message: userMessage,
-          conversation_id: chatId,
+          conversation_id: currentChatId,
           preferences: {
             style: 'casual',
             detailed: true
@@ -698,7 +706,7 @@ const Chat = () => {
           response: response,
           feedback_score: score,
           preferences: {
-            conversation_id: chatId
+            conversation_id: currentChatId
           }
         })
       });
@@ -743,7 +751,7 @@ const Chat = () => {
               security_insights: aiResponseData.security_insights
             };
             
-            const conversationRef = doc(db, 'conversations', chatId);
+            const conversationRef = doc(db, 'conversations', currentChatId);
             await updateDoc(conversationRef, {
               messages: [...messages, aiMessage],
               updatedAt: new Date().toISOString()
@@ -776,7 +784,7 @@ const Chat = () => {
     
     try {
       // Eğer chatId "new" ise veya bulunmuyorsa, yeni bir sohbet oluştur
-      if (!chatId || chatId === "new") {
+      if (!currentChatId || currentChatId === "new") {
         console.log("Yeni sohbet oluşturuluyor ve mesaj gönderiliyor...");
         
         // Kullanıcı mesajını oluştur
@@ -849,7 +857,7 @@ const Chat = () => {
       }
       
       // Artık mevcut bir sohbete mesaj gönderiyoruz
-      console.log(`${chatId} ID'li sohbete mesaj gönderiliyor:`, messageToSend);
+      console.log(`${currentChatId} ID'li sohbete mesaj gönderiliyor:`, messageToSend);
       
       const userMessage = {
         text: messageToSend,
@@ -864,7 +872,7 @@ const Chat = () => {
       
       try {
         // Firestore'a kullanıcı mesajını ekle
-        const conversationRef = doc(db, 'conversations', chatId);
+        const conversationRef = doc(db, 'conversations', currentChatId);
         await updateDoc(conversationRef, {
           messages: [...existingMessages, userMessage],
           updatedAt: new Date().toISOString()
@@ -1031,16 +1039,16 @@ const Chat = () => {
   // Sohbet yükleme durumlarını yönetmek için etkilenme durumları
   useEffect(() => {
     // Eğer chatId yoksa veya "new" ise, diğer durumları temizle
-    if (!chatId || chatId === "new") {
+    if (!currentChatId || currentChatId === "new") {
       setLoadingConversation(false);
       setNotFound(false);
       setError(null);
     }
-  }, [chatId]);
+  }, [currentChatId]);
   
   // Bileşen render kısmı
   // chatId yok veya "new" değilse, ve hiçbir conversation yüklenmemişse
-  if (!chatId) {
+  if (!currentChatId && !window.location.pathname.includes('/chat/')) {
     return (
       <ChatContainer>
         <ChatHeader>
@@ -1111,7 +1119,7 @@ const Chat = () => {
               Aradığınız sohbet bulunamadı veya silinmiş olabilir. Lütfen sol menüden başka bir sohbet seçin veya yeni bir sohbet başlatın.
             </EmptyStateText>
           </EmptyStateContainer>
-        ) : chatId === "new" && messages.length === 0 ? (
+        ) : currentChatId === "new" && messages.length === 0 ? (
           /* Yeni sohbet başlatma durumu */
           <EmptyStateContainer>
             <EmptyStateTitle>Yeni bir sohbet başlat</EmptyStateTitle>

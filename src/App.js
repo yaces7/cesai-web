@@ -108,12 +108,12 @@ function App() {
             {/* Ana uygulama yolları */}
             <Route path="/chat" element={
               <PrivateRoute>
-                <AppLayout />
+                <AppLayout key="chat-main" />
               </PrivateRoute>
             } />
             <Route path="/chat/:id" element={
               <PrivateRoute>
-                <AppLayout />
+                <AppLayout key="chat-with-id" />
               </PrivateRoute>
             } />
             <Route path="/" element={<Navigate to="/chat" replace />} />
