@@ -450,6 +450,7 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
+      credentials: 'include',
       signal: AbortSignal.timeout(timeoutMs)
     };
     
@@ -471,8 +472,10 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       if (method === 'GET' || method === 'POST') {
         try {
           const data = await response.json();
+          console.log("API yanıtı alındı:", data);
           return { success: true, data };
         } catch (e) {
+          console.error("JSON çözümleme hatası:", e);
           return { success: true }; // JSON içeriği olmayabilir
         }
       }
@@ -793,7 +796,7 @@ const Chat = () => {
         message: text,
         conversation_id: currentChatId,
         model: 'gpt-3.5-turbo'
-      }, token, 30000);
+      }, token, 60000); // Timeout süresini arttırıyorum
       
       // API yanıtı başarılı ise
       if (result.success) {
@@ -801,6 +804,19 @@ const Chat = () => {
         setApiStatus('connected');
         
         const data = result.data;
+        console.log("İşlenecek API yanıtı:", data);
+        
+        // Yanıt formatını kontrol et ve işle
+        if (!data || (!data.response && !data.message)) {
+          console.warn("API'den boş yanıt alındı");
+          return {
+            text: "Üzgünüm, yanıt alınamadı. Lütfen tekrar deneyin.",
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            error: true
+          };
+        }
+        
         return {
           text: data.response || data.message || '',
           analysis: data.analysis || null,
@@ -1016,11 +1032,70 @@ const Chat = () => {
       // API yanıtını al (yeni ya da mevcut sohbet için)
       if (!initialMessage || currentId) {
         try {
-          const response = await sendMessage(userMessage);
-          console.log("API yanıtı alındı:", response);
+          // API'ye mesajı gönder ve yanıtı al
+          const aiResponseData = await sendMessage(userMessage);
+          console.log("AI yanıtı:", aiResponseData);
+          
+          // AI mesajı oluştur
+          const aiMessage = {
+            id: Date.now().toString(),
+            text: aiResponseData.text || "Yanıt alınamadı.",
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            analysis: aiResponseData.analysis,
+            context: aiResponseData.context,
+            code_blocks: aiResponseData.code_blocks,
+            security_insights: aiResponseData.security_insights
+          };
+          
+          try {
+            // Firestore'daki mesajları güncelle
+            const conversationRef = doc(db, 'conversations', currentId);
+            
+            // Önce mevcut mesajları al
+            const docSnap = await getDoc(conversationRef);
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              const updatedMessages = [...(data.messages || []), aiMessage];
+              
+              await updateDoc(conversationRef, {
+                messages: updatedMessages,
+                updatedAt: new Date().toISOString()
+              });
+              
+              console.log("AI yanıtı Firestore'a kaydedildi");
+            } else {
+              console.error("Sohbet belgesi bulunamadı");
+            }
+          } catch (firebaseError) {
+            console.error("AI yanıtı Firestore'a kaydedilirken hata:", firebaseError);
+            
+            // Firebase hatası olsa da UI'da yanıtı göster
+            setMessages(prevMessages => [...prevMessages, aiMessage]);
+          }
         } catch (apiError) {
           console.error("API yanıtı alınırken hata:", apiError);
-          setError("API yanıtı alınamadı: " + apiError.message);
+          
+          // Hata mesajını sohbete ekle
+          const errorMessage = {
+            id: Date.now().toString(),
+            text: `Üzgünüm, bir hata oluştu: ${apiError.message}`,
+            isUser: false,
+            timestamp: new Date().toISOString(),
+            error: true
+          };
+          
+          setMessages(prevMessages => [...prevMessages, errorMessage]);
+          
+          try {
+            const conversationRef = doc(db, 'conversations', currentId);
+            await updateDoc(conversationRef, {
+              messages: arrayUnion(errorMessage),
+              updatedAt: new Date().toISOString()
+            });
+          } catch (updateError) {
+            console.error("Hata mesajı Firestore'a kaydedilirken hata:", updateError);
+          }
         }
       }
     } catch (error) {
