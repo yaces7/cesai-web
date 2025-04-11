@@ -484,7 +484,11 @@ const Chat = () => {
     
     // Scroll durumunu güncelle
     setShowScrollButton(!isNearBottom);
-    setIsScrollingUp(scrollTop < (messagesContainerRef.current._lastScrollTop || 0));
+    
+    // Son scroll pozisyonunu kontrol et
+    if (messagesContainerRef.current._lastScrollTop !== undefined) {
+      setIsScrollingUp(scrollTop < messagesContainerRef.current._lastScrollTop);
+    }
     
     // Son scroll pozisyonunu kaydet
     messagesContainerRef.current._lastScrollTop = scrollTop;
@@ -492,23 +496,49 @@ const Chat = () => {
   
   // Sohbeti yükleme fonksiyonu
   const fetchConversation = async (id = currentChatId) => {
-    if (!id || id === 'new' || !user) return;
+    if (!id || id === 'new' || !user) return null;
     
     try {
       setLoadingConversation(true);
+      setError(null);
       
       // Firestore'dan sohbet verisini al
       const conversationRef = doc(db, "conversations", id);
+      console.log(`Sohbet ID '${id}' için veri alınıyor...`);
+      
+      // Önce belgeyi kontrol et
+      const docSnap = await getDoc(conversationRef);
+      if (!docSnap.exists()) {
+        console.error(`Sohbet ID '${id}' bulunamadı.`);
+        setNotFound(true);
+        setLoadingConversation(false);
+        return null;
+      }
+      
+      const data = docSnap.data();
+      
+      // Kullanıcıya ait olup olmadığını kontrol et
+      if (data.userId !== user.uid) {
+        console.error(`Sohbet '${id}' bu kullanıcıya ait değil.`);
+        setNotFound(true);
+        setLoadingConversation(false);
+        return null;
+      }
       
       // Realtime güncelleme için onSnapshot kullanılıyor
       const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
         if (docSnap.exists()) {
-          const data = docSnap.data();
+          const data = {
+            id: docSnap.id,
+            ...docSnap.data()
+          };
+          
           setConversation(data);
           
           // Mesajları işle
           if (data.messages && Array.isArray(data.messages)) {
-            setMessages(data.messages);
+            const processedMessages = processMessages(data.messages);
+            setMessages(processedMessages);
             
             // Yeni mesaj geldiğinde otomatik kaydırma
             setTimeout(() => {
@@ -520,13 +550,13 @@ const Chat = () => {
           
           setLoadingConversation(false);
         } else {
-          console.error(`Sohbet bulunamadı: ${id}`);
-          setError("Sohbet bulunamadı");
+          console.error(`Realtime update: Sohbet ID '${id}' artık bulunamıyor.`);
+          setNotFound(true);
           setLoadingConversation(false);
         }
       }, (error) => {
-        console.error("Sohbet yüklenirken hata:", error);
-        setError(`Sohbet yüklenirken hata oluştu: ${error.message}`);
+        console.error("Realtime update hatası:", error);
+        setError(`Sohbet verileri dinlenirken hata oluştu: ${error.message}`);
         setLoadingConversation(false);
       });
       
@@ -535,6 +565,7 @@ const Chat = () => {
       console.error("Sohbet yükleme hatası:", error);
       setError(`Sohbet yüklenirken bir hata oluştu: ${error.message}`);
       setLoadingConversation(false);
+      return null;
     }
   };
   
@@ -566,8 +597,8 @@ const Chat = () => {
       // API durumunu güncelle
       setApiStatus('connecting');
       
-      // API URL'sini ayarla - cesai.app.tc domaini kullan
-      const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://cesai-production.up.railway.app';
+      // API URL'sini ayarla
+      const apiBaseUrl = 'https://cesai-production.up.railway.app';
       const healthUrl = `${apiBaseUrl}/health`;
       
       console.log('API bağlantısı kontrol ediliyor:', healthUrl);
@@ -580,8 +611,7 @@ const Chat = () => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Origin': window.location.origin,
-          'Access-Control-Allow-Origin': '*'
+          'Origin': window.location.origin
         },
         mode: 'cors',
         credentials: 'omit'
@@ -626,13 +656,13 @@ const Chat = () => {
       }
       
       try {
-        // Eğer mesaj sıkıştırılmışsa, çözümle
-        if (msg.isCompressed) {
+        // Eğer mesaj sıkıştırılmışsa ve mesajCoz fonksiyonu varsa çözümle
+        if (msg.isCompressed && mesajCoz) {
           console.log(`Mesaj #${index} sıkıştırılmış, çözümleniyor...`);
-          const decompressedText = mesajCoz ? mesajCoz(msg.text) : msg.text;
+          const decompressedText = mesajCoz(msg.text);
           return {
             ...msg,
-            text: decompressedText,
+            text: decompressedText || msg.text,
             _originalCompressed: msg.text // Debug için orijinal sıkıştırılmış metni saklayalım
           };
         }
@@ -658,144 +688,20 @@ const Chat = () => {
     });
   };
   
-  // Firestore'dan sohbeti çek
+  // İnternet bağlantısı durumunu izle
   useEffect(() => {
-    if (!user || !currentChatId) return;
+    // Uygulama başladığında API bağlantısını kontrol et
+    checkApiConnection();
     
-    // Eğer chatId "new" ise, yükleme göstermeyin
-    if (currentChatId === "new") {
-      setConversation(null);
-      setMessages([]);
-      setNotFound(false);
-      return;
-    }
-    
-    setLoadingConversation(true);
-    setError(null);
-    console.log(`Sohbet ID'si ${currentChatId} için veri çekiliyor...`);
-    
-    const fetchConversation = async () => {
-      try {
-        const conversationRef = doc(db, 'conversations', currentChatId);
-        console.log(`Veri çekiliyor: ${conversationRef.path}`);
-        
-        // Önce bir kere veriyi çekelim, sonra dinlemeye başlayalım
-        const docSnap = await getDoc(conversationRef);
-          
-          if (!docSnap.exists()) {
-          console.error(`Sohbet ID'si ${currentChatId} bulunamadı.`);
-            setNotFound(true);
-          setLoadingConversation(false);
-            return;
-          }
-          
-          const conversationData = {
-            id: docSnap.id,
-            ...docSnap.data()
-          };
-        
-        console.log('Çekilen ham veri:', conversationData);
-        
-        // Temel veri kontrolleri
-        if (!conversationData.userId) {
-          console.error('Sohbette userId alanı eksik:', conversationData);
-          setError('Sohbet verisi eksik veya bozuk (userId eksik)');
-          setLoadingConversation(false);
-          return;
-        }
-          
-          // Kullanıcıya ait sohbet mi kontrol et
-          if (conversationData.userId !== user.uid) {
-          console.error(`Sohbet ID'si ${currentChatId} bu kullanıcıya ait değil. Beklenen: ${user.uid}, Bulunan: ${conversationData.userId}`);
-            setNotFound(true);
-          setLoadingConversation(false);
-            return;
-          }
-          
-        // Mesajlar dizisi kontrolü
-        if (!conversationData.messages || !Array.isArray(conversationData.messages)) {
-          console.error('Sohbette mesajlar dizisi eksik veya geçersiz:', conversationData);
-          
-          // Mesajlar yoksa oluştur
-          conversationData.messages = [{
-            text: 'Hoş geldiniz! Yeni bir sohbete başladınız.',
-            isUser: false,
-            timestamp: new Date().toISOString()
-          }];
-          
-          // Firestore'da mesajları güncelle
-          try {
-            await updateDoc(conversationRef, {
-              messages: conversationData.messages,
-              updatedAt: new Date().toISOString()
-            });
-            console.log('Eksik mesajlar dizisi oluşturuldu ve kaydedildi');
-          } catch (updateError) {
-            console.error('Mesajlar dizisi oluşturulurken hata:', updateError);
-          }
-        }
-        
-        console.log(`Sohbet verisi başarıyla çekildi:`, conversationData);
-          setConversation(conversationData);
-        
-        // Sıkıştırılmış mesajları çözümle
-        const processedMessages = processMessages(conversationData.messages || []);
-        console.log('İşlenmiş mesajlar:', processedMessages);
-        
-        setMessages(processedMessages);
-        setNotFound(false);
-        setLoadingConversation(false);
-        
-        // Şimdi gerçek zamanlı dinlemeye başlayalım
-        const unsubscribe = onSnapshot(conversationRef, (docSnap) => {
-          if (!docSnap.exists()) {
-            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${currentChatId} bulunamadı.`);
-            setNotFound(true);
-            return;
-          }
-          
-          const updatedConversationData = {
-            id: docSnap.id,
-            ...docSnap.data()
-          };
-          
-          // Kullanıcıya ait sohbet mi kontrol et
-          if (updatedConversationData.userId !== user.uid) {
-            console.error(`Gerçek zamanlı güncelleme: Sohbet ID'si ${currentChatId} bu kullanıcıya ait değil.`);
-            setNotFound(true);
-            return;
-          }
-          
-          console.log('Sohbet gerçek zamanlı güncellendi:', updatedConversationData);
-          setConversation(updatedConversationData);
-          
-          // Mesajlar kontrolü
-          if (!updatedConversationData.messages || !Array.isArray(updatedConversationData.messages)) {
-            console.error('Gerçek zamanlı güncelleme: Mesajlar dizisi geçersiz:', updatedConversationData);
-            return;
-          }
-          
-          // Sıkıştırılmış mesajları çözümle
-          const processedMessages = processMessages(updatedConversationData.messages || []);
-          setMessages(processedMessages);
-          setNotFound(false);
-        }, (err) => {
-          console.error('Sohbet dinlenirken hata oluştu:', err);
-          setError('Firebase erişim hatası: ' + err.message);
-          setLoadingConversation(false);
-        });
-        
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Sohbet yüklenirken hata oluştu:', error);
-        setError('Firebase erişim hatası: ' + error.message);
-        setNotFound(false); // Sohbet bulunamadı değil, bir hata oluştu
-        setLoadingConversation(false);
+    // 30 saniyede bir API bağlantı kontrolü yap
+    const interval = setInterval(() => {
+      if (apiStatus === 'error') {
+        checkApiConnection();
       }
-    };
+    }, 30000);
     
-    fetchConversation();
-  }, [db, user, currentChatId, mesajCoz]);
+    return () => clearInterval(interval);
+  }, [apiStatus]);  // apiStatus değişince yeniden çalıştır
   
   // Mesajlar değiştiğinde aşağı kaydır
   useEffect(() => {
@@ -855,7 +761,7 @@ const Chat = () => {
       }
 
       // API URL'sini ayarla
-      const apiBaseUrl = process.env.REACT_APP_API_URL || 'https://cesai-production.up.railway.app';
+      const apiBaseUrl = 'https://cesai-production.up.railway.app';
       console.log('API URL:', apiBaseUrl);
       
       // İstek için zaman aşımı ayarla (30 saniye)
@@ -864,30 +770,32 @@ const Chat = () => {
       );
       
       try {
-        // API isteği yapmadan önce CORS kontrol isteği yap
-        const corsCheckPromise = fetch(`${apiBaseUrl}/health`, {
+        // CORS ön kontrolü
+        console.log("CORS ön kontrolü yapılıyor...");
+        await fetch(`${apiBaseUrl}/health`, {
           method: 'OPTIONS',
           headers: {
-            'Origin': window.location.origin
+            'Origin': window.location.origin,
+            'Access-Control-Request-Method': 'POST',
+            'Access-Control-Request-Headers': 'Content-Type, Authorization',
           },
-          mode: 'cors'
+          mode: 'cors',
+          credentials: 'omit'
         });
-        
-        await Promise.race([corsCheckPromise, new Promise((_, reject) => setTimeout(() => reject(new Error('CORS kontrolü zaman aşımı')), 3000))]);
       } catch (corsError) {
         console.warn('CORS ön kontrolü başarısız:', corsError);
-        // CORS hatası olsa da ana isteği deneyebiliriz
+        // CORS hatası olsa da devam edebiliriz
       }
       
       // API isteği yap
+      console.log("API isteği gönderiliyor:", `${apiBaseUrl}/chat`);
       const fetchPromise = fetch(`${apiBaseUrl}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
-          'Origin': window.location.origin,
-          'Access-Control-Allow-Origin': '*'
+          'Origin': window.location.origin
         },
         body: JSON.stringify({ 
           message: text,
@@ -895,7 +803,7 @@ const Chat = () => {
           model: 'gpt-3.5-turbo'
         }),
         mode: 'cors',
-        credentials: 'omit'  // 'include' yerine 'omit' kullanarak CORS sorunlarını azalt
+        credentials: 'omit'
       });
       
       const response = await Promise.race([fetchPromise, timeout]);
@@ -957,8 +865,7 @@ const Chat = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
-          'Origin': window.location.origin,
-          'Access-Control-Allow-Origin': '*'
+          'Origin': window.location.origin
         },
         body: JSON.stringify({
           message: message,
@@ -1062,37 +969,44 @@ const Chat = () => {
           timestamp: new Date().toISOString()
         }]);
         
-        // Sidebar bileşenine erişim sağlamak zor olduğu için aynı mantığı burada uygulayalım
-        const now = new Date();
-        const timestamp = now.toISOString();
-        
-        // İlk mesajdan başlık oluştur
-        const title = userMessage
-          ? userMessage.substring(0, 30) + (userMessage.length > 30 ? "..." : "") 
-          : "Yeni Sohbet";
-        
-        const docRef = await addDoc(collection(db, "conversations"), {
-          userId: user.uid,
-          title: title,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-          pinned: false,
-          archived: false,
-          messages: [{
-            id: Date.now().toString(),
-            text: userMessage,
-            isUser: true,
-            timestamp: timestamp
-          }]
-        });
-        
-        currentId = docRef.id;
-        
-        // URL'yi güncelle ama sayfayı yenileme
-        navigate(`/chat/${currentId}`, { replace: true });
-        
-        // Yeni konuşmayı izlemeye başla
-        fetchConversation(currentId);
+        try {
+          // Sidebar bileşenine erişim sağlamak zor olduğu için aynı mantığı burada uygulayalım
+          const now = new Date();
+          const timestamp = now.toISOString();
+          
+          // İlk mesajdan başlık oluştur
+          const title = userMessage
+            ? userMessage.substring(0, 30) + (userMessage.length > 30 ? "..." : "") 
+            : "Yeni Sohbet";
+          
+          const docRef = await addDoc(collection(db, "conversations"), {
+            userId: user.uid,
+            title: title,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            pinned: false,
+            archived: false,
+            messages: [{
+              id: Date.now().toString(),
+              text: userMessage,
+              isUser: true,
+              timestamp: timestamp
+            }]
+          });
+          
+          currentId = docRef.id;
+          
+          // URL'yi güncelle ama sayfayı yenileme
+          navigate(`/chat/${currentId}`, { replace: true });
+          
+          // Yeni konuşmayı izlemeye başla
+          fetchConversation(currentId);
+        } catch (firebaseError) {
+          console.error("Yeni sohbet oluşturulurken hata:", firebaseError);
+          setError("Firebase veritabanına erişim hatası: " + firebaseError.message);
+          setLoading(false);
+          return;
+        }
       } else {
         // Mevcut sohbete mesaj ekle
         const userMessageObj = {
@@ -1105,12 +1019,17 @@ const Chat = () => {
         // Önce local state'i güncelle (UI daha hızlı tepki versin)
         setMessages(prevMessages => [...prevMessages, userMessageObj]);
         
-        // Firestore'daki mesajları güncelle
-        const conversationRef = doc(db, 'conversations', currentId);
-        await updateDoc(conversationRef, {
-          messages: [...messages, userMessageObj],
-          updatedAt: new Date().toISOString()
-        });
+        try {
+          // Firestore'daki mesajları güncelle
+          const conversationRef = doc(db, 'conversations', currentId);
+          await updateDoc(conversationRef, {
+            messages: arrayUnion(userMessageObj),
+            updatedAt: new Date().toISOString()
+          });
+        } catch (updateError) {
+          console.error("Mesaj Firestore'a kaydedilirken hata:", updateError);
+          // Firestore hatası olsa da devam et, kullanıcı mesajı görüntülenmeye devam eder
+        }
       }
       
       // Sohbet oluşturulduğunda veya mesaj eklendiğinde otomatik kaydırma
@@ -1120,11 +1039,17 @@ const Chat = () => {
       
       // API yanıtını al (yeni ya da mevcut sohbet için)
       if (!initialMessage || currentId) {
-        await sendMessage(userMessage);
+        try {
+          const response = await sendMessage(userMessage);
+          console.log("API yanıtı alındı:", response);
+        } catch (apiError) {
+          console.error("API yanıtı alınırken hata:", apiError);
+          setError("API yanıtı alınamadı: " + apiError.message);
+        }
       }
     } catch (error) {
-      console.error("Error sending message:", error);
-      setError("Mesaj gönderilirken bir hata oluştu.");
+      console.error("Mesaj gönderilirken hata:", error);
+      setError("Mesaj gönderilirken bir hata oluştu: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -1262,6 +1187,37 @@ const Chat = () => {
       </MessageWrapper>
     );
   };
+  
+  // Firestore'dan sohbeti yükleme
+  useEffect(() => {
+    if (!user || !currentChatId) return;
+    
+    // Eğer chatId "new" ise, yükleme göstermeyin
+    if (currentChatId === "new") {
+      setConversation(null);
+      setMessages([]);
+      setNotFound(false);
+      setLoadingConversation(false);
+      return;
+    }
+    
+    console.log(`Sohbet ID '${currentChatId}' için Firestore dinleyicisi ayarlanıyor...`);
+    setLoadingConversation(true);
+    
+    // fetchConversation fonksiyonunu çağır ve unsubscribe fonksiyonunu al
+    const unsubscribePromise = fetchConversation(currentChatId);
+    
+    // Cleanup function
+    return () => {
+      // Unsubscribe fonksiyonunu çağır (eğer varsa)
+      unsubscribePromise.then(unsubscribe => {
+        if (unsubscribe) {
+          console.log(`Sohbet ID '${currentChatId}' için Firestore dinleyicisi kaldırılıyor...`);
+          unsubscribe();
+        }
+      });
+    };
+  }, [db, user, currentChatId]);
   
   // Sohbet yükleme durumlarını yönetmek için etkilenme durumları
   useEffect(() => {
