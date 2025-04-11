@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle, FaWifi, FaExclamationTriangle } from 'react-icons/fa';
+import { FaPaperPlane, FaSpinner, FaArrowDown, FaPaperclip, FaThumbsUp, FaThumbsDown, FaInfoCircle, FaWifi, FaExclamationTriangle, FaRegCopy, FaSync, FaRegComment } from 'react-icons/fa';
 import { useFirebase } from '../contexts/FirebaseContext';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -26,9 +26,10 @@ const ChatHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
+  padding: 0.8rem 1rem;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   
   h1 {
     margin: 0;
@@ -45,6 +46,7 @@ const MessagesContainer = styled.div`
   padding: 1rem;
   display: flex;
   flex-direction: column;
+  background: var(--bg-primary);
   
   &::-webkit-scrollbar {
     width: 6px;
@@ -62,19 +64,24 @@ const MessagesContainer = styled.div`
 
 const MessageWrapper = styled.div`
   display: flex;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
   flex-direction: ${props => props.isUser ? 'row-reverse' : 'row'};
+  position: relative;
+  
+  &:hover ${MessageActions} {
+    opacity: 1;
+  }
 `;
 
 const MessageBubble = styled.div`
   max-width: 70%;
   padding: 0.8rem 1rem;
-  border-radius: 1rem;
+  border-radius: 0.7rem;
   background: ${props => props.isUser 
     ? 'var(--accent-color)' 
     : props.error 
       ? 'rgba(255, 107, 107, 0.1)' 
-      : 'var(--bg-secondary)'};
+      : 'var(--bg-hover)'};
   color: ${props => props.isUser 
     ? '#ffffff' 
     : props.error 
@@ -86,7 +93,8 @@ const MessageBubble = styled.div`
     : props.error 
       ? 'rgba(255, 107, 107, 0.3)' 
       : 'var(--border-color)'};
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
   
   .code-blocks {
     margin-top: 0.5rem;
@@ -131,23 +139,27 @@ const MessageTime = styled.div`
 const InputContainer = styled.form`
   display: flex;
   align-items: center;
-  padding: 1rem;
+  padding: 0.8rem 1rem;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
 `;
 
 const Input = styled.input`
   flex: 1;
   padding: 0.8rem 1rem;
-  border-radius: 1rem;
+  border-radius: 1.2rem;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   font-size: 1rem;
   outline: none;
+  transition: all 0.2s ease;
   
   &:focus {
     border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.1);
   }
   
   &::placeholder {
@@ -187,10 +199,27 @@ const SendButton = styled(motion.button)`
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 8px rgba(100, 108, 255, 0.5);
+  }
   
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    transform: scale(1);
+    box-shadow: none;
+  }
+  
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 `;
 
@@ -211,6 +240,29 @@ const ScrollToBottomButton = styled(motion.button)`
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 `;
 
+const CopyNotification = styled.div`
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-secondary);
+  padding: 8px 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  
+  &.show {
+    opacity: 1;
+  }
+`;
+
 const EmptyStateContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -220,17 +272,27 @@ const EmptyStateContainer = styled.div`
   color: var(--text-secondary);
   text-align: center;
   padding: 2rem;
+  background: var(--bg-primary);
+  
+  svg {
+    margin-bottom: 1rem;
+    opacity: 0.6;
+    color: var(--accent-color);
+  }
 `;
 
 const EmptyStateTitle = styled.h3`
   font-size: 1.5rem;
   margin-bottom: 1rem;
   color: var(--text-primary);
+  font-weight: 500;
 `;
 
 const EmptyStateText = styled.p`
   max-width: 500px;
   line-height: 1.6;
+  opacity: 0.8;
+  font-size: 0.95rem;
 `;
 
 const ErrorContainer = styled.div`
@@ -320,6 +382,39 @@ const RetryButton = styled.button`
   }
 `;
 
+const MessageActions = styled.div`
+  position: absolute;
+  bottom: -30px;
+  ${props => props.isUser ? 'left: 0;' : 'right: 0;'}
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  z-index: 10;
+`;
+
+const ActionButton = styled.button`
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--accent-color);
+  }
+`;
+
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -339,6 +434,7 @@ const Chat = () => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [showCopyNotification, setShowCopyNotification] = useState(false);
   const navigate = useNavigate();
   
   const messagesContainerRef = useRef(null);
@@ -972,6 +1068,41 @@ const Chat = () => {
     const hasSecurityInsights = security_insights && typeof security_insights === 'string' && security_insights.length > 0;
     const isErrorMessage = !!error;
     
+    // Mesajı panoya kopyalama fonksiyonu
+    const copyToClipboard = () => {
+      navigator.clipboard.writeText(text)
+        .then(() => {
+          // Başarılı olduğunda bildirim göster
+          setShowCopyNotification(true);
+          // 2 saniye sonra bildirimi kapat
+          setTimeout(() => {
+            setShowCopyNotification(false);
+          }, 2000);
+        })
+        .catch(err => {
+          console.error('Kopyalama işlemi başarısız:', err);
+        });
+    };
+    
+    // Mesajı yeniden oluşturma işlemi
+    const regenerateMessage = () => {
+      if (isUser || index === 0) return;
+      
+      // Bir önceki kullanıcı mesajını bul
+      const previousUserMessage = messages
+        .slice(0, index)
+        .reverse()
+        .find(msg => msg.isUser);
+      
+      if (previousUserMessage) {
+        // Önceki kullanıcı mesajını input alanına ekle
+        setInput(previousUserMessage.text);
+        
+        // Otomatik odaklanma
+        document.querySelector('input[type="text"]').focus();
+      }
+    };
+    
     return (
       <MessageWrapper isUser={isUser}>
         <div>
@@ -1007,6 +1138,18 @@ const Chat = () => {
                 {hasAnalysis && <span>{analysis}</span>}
               </MessageAnalysis>
             )}
+            
+            {/* Mesaj Aksiyonları - Hover durumunda görünecek */}
+            <MessageActions isUser={isUser}>
+              <ActionButton onClick={copyToClipboard}>
+                <FaRegCopy /> Kopyala
+              </ActionButton>
+              {!isUser && !isErrorMessage && (
+                <ActionButton onClick={regenerateMessage}>
+                  <FaSync /> Yeniden Oluştur
+                </ActionButton>
+              )}
+            </MessageActions>
           </MessageBubble>
           
           <MessageTime isUser={isUser}>
@@ -1087,6 +1230,11 @@ const Chat = () => {
   
   return (
     <ChatContainer>
+      {/* Kopyala bildirimi */}
+      <CopyNotification className={showCopyNotification ? 'show' : ''}>
+        <FaRegCopy /> Mesaj panoya kopyalandı
+      </CopyNotification>
+      
       <ChatHeader>
         <h1>{conversation ? conversation.title : 'CesAI'}</h1>
         {showConnectionStatus && (
@@ -1114,6 +1262,7 @@ const Chat = () => {
         ) : notFound ? (
           /* Sohbet bulunamadı durumu */
           <EmptyStateContainer>
+            <FaExclamationTriangle size={40} />
             <EmptyStateTitle>Sohbet bulunamadı</EmptyStateTitle>
             <EmptyStateText>
               Aradığınız sohbet bulunamadı veya silinmiş olabilir. Lütfen sol menüden başka bir sohbet seçin veya yeni bir sohbet başlatın.
@@ -1122,6 +1271,7 @@ const Chat = () => {
         ) : currentChatId === "new" && messages.length === 0 ? (
           /* Yeni sohbet başlatma durumu */
           <EmptyStateContainer>
+            <FaPaperPlane size={40} />
             <EmptyStateTitle>Yeni bir sohbet başlat</EmptyStateTitle>
             <EmptyStateText>
               Aşağıdan bir mesaj göndererek yeni bir sohbet başlatabilirsiniz.
@@ -1135,6 +1285,7 @@ const Chat = () => {
         ) : (
           /* Henüz hiç mesaj yoksa */
           <EmptyStateContainer>
+            <FaRegComment size={40} />
             <EmptyStateTitle>Henüz hiç mesaj yok</EmptyStateTitle>
             <EmptyStateText>
               Bu sohbette henüz hiç mesaj yok. Aşağıdan bir mesaj göndererek başlayabilirsiniz.
