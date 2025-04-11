@@ -140,7 +140,7 @@ const ConversationsList = styled(motion.div)`
   padding: 0 0.5rem;
 `;
 
-const ConversationItem = styled.div`
+const ConversationItemWrapper = styled.div`
   display: flex;
   align-items: center;
   padding: 0.6rem 0.5rem;
@@ -148,166 +148,25 @@ const ConversationItem = styled.div`
   cursor: pointer;
   background: ${props => props.active ? 'var(--input-bg)' : 'transparent'};
   color: var(--text-primary);
-  transition: background 0.2s;
+  transition: all 0.2s;
   position: relative;
+  margin-bottom: 2px;
   
   &:hover {
     background: var(--input-bg);
   }
-`;
-
-const ConversationIcon = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 0.8rem;
-  color: var(--text-secondary);
-`;
-
-const ConversationText = styled.div`
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 0.9rem;
-`;
-
-const SidebarBottom = styled.div`
-  padding: 1rem;
-  border-top: 1px solid var(--border-color);
-`;
-
-const UserInfo = styled.div`
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 0;
-`;
-
-const UserAvatar = styled.div`
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--accent-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: bold;
-  margin-right: 0.8rem;
-  font-size: 0.9rem;
-`;
-
-const UserDetails = styled.div`
-  flex: 1;
-`;
-
-const UserName = styled.div`
-  font-size: 0.9rem;
-  color: var(--text-color);
-`;
-
-const UserStatus = styled.div`
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-`;
-
-const OptionsContainer = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-`;
-
-const IconButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--input-bg);
-  color: var(--text-secondary);
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
   
-  &:hover {
-    color: var(--text-primary);
-    background: var(--border-color);
-  }
-`;
-
-const UsageInfo = styled.div`
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  margin-top: 0.8rem;
-  padding: 0.5rem;
-  border-radius: 6px;
-  background: var(--input-bg);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const ProgressBar = styled.div`
-  width: 100%;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  margin-top: 0.3rem;
-  overflow: hidden;
-`;
-
-const ProgressFill = styled.div`
-  height: 100%;
-  background: linear-gradient(90deg, #646cff, #8b3dff);
-  width: ${props => `${props.percentage}%`};
-  transition: width 0.3s ease;
-`;
-
-const ContextMenu = styled.div`
-  position: fixed;
-  background-color: var(--bg-secondary);
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  overflow: hidden;
-  min-width: 200px;
-`;
-
-const ContextMenuItem = styled.div`
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: ${props => props.danger ? 'var(--error-color)' : 'var(--text-color)'};
-  
-  &:hover {
-    background-color: var(--bg-hover);
+  /* Yeni oluşturulan sohbeti vurgulama stili */
+  &.highlight {
+    animation: pulse 1s ease-in-out;
+    background: var(--bg-hover);
+    border: 1px solid var(--accent-color);
   }
   
-  svg {
-    font-size: 14px;
-  }
-`;
-
-const ContextMenuDivider = styled.div`
-  height: 1px;
-  background-color: var(--border-color);
-  margin: 4px 0;
-`;
-
-const ConversationItemWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  padding: 10px 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  margin-bottom: 2px;
-  background-color: ${props => props.active ? 'var(--bg-hover)' : 'transparent'};
-  
-  &:hover {
-    background-color: var(--bg-hover);
+  @keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(100, 108, 255, 0.4); }
+    50% { transform: scale(1.02); box-shadow: 0 0 0 5px rgba(100, 108, 255, 0.2); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(100, 108, 255, 0); }
   }
 `;
 
@@ -535,21 +394,36 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
       setLoading(true);
       setError(null);
       
+      // Yeni sohbet oluşturma işlemini başlatmadan önce kontrol et
+      console.log('Yeni sohbet oluşturuluyor...');
+      
       const chatId = await createConversation('Yeni Sohbet');
       console.log(`Yeni sohbet oluşturuldu, ID: ${chatId}`);
       
-      // Yeni sohbete yönlendir ve aktif sohbet olarak ayarla
+      // Yönlendirme, ID'yi ayarlama ve UI güncellemesi için bir zaman aralığı bırak
       setShowNewChatDropdown(false);
       setActiveConversation(chatId);
-      navigate(`/chat/${chatId}`);
       
-      // Timeout ile diğer bileşenlerin güncellenmesini bekle
+      // Önce state güncellensin, sonra navigasyon yapılsın
       setTimeout(() => {
-        const chatElement = document.getElementById(`chat-${chatId}`);
-        if (chatElement) {
-          chatElement.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 500);
+        navigate(`/chat/${chatId}`);
+        
+        // Bir süre sonra sohbet öğesini bul ve görünüme getir
+        setTimeout(() => {
+          const chatElement = document.getElementById(`chat-${chatId}`);
+          if (chatElement) {
+            chatElement.scrollIntoView({ behavior: 'smooth' });
+            // Görsel bir vurgu ekle
+            chatElement.classList.add('highlight');
+            setTimeout(() => {
+              chatElement.classList.remove('highlight');
+            }, 1000);
+          } else {
+            console.warn(`Sohbet öğesi bulunamadı: chat-${chatId}`);
+          }
+        }, 300);
+      }, 100);
+      
     } catch (error) {
       console.error('Sohbet oluşturulurken hata oluştu:', error);
       setError('Sohbet oluşturulurken hata oluştu: ' + error.message);
@@ -559,8 +433,27 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   };
   
   const handleConversationClick = (id) => {
-    setActiveConversation(id);
-    navigate(`/chat/${id}`);
+    if (!id) {
+      console.error('Geçersiz sohbet ID\'si');
+      return;
+    }
+    
+    console.log(`Sohbet tıklandı: ${id}`);
+    
+    try {
+      // Aktif sohbeti güncelle
+      setActiveConversation(id);
+      
+      // Sohbet sayfasına yönlendir
+      navigate(`/chat/${id}`);
+      
+      // Mobil görünümde sidebar'ı kapat
+      if (window.innerWidth <= 768) {
+        setShowSidebar(false);
+      }
+    } catch (error) {
+      console.error('Sohbet yönlendirmesi yapılırken hata oluştu:', error);
+    }
   };
   
   const handleContextMenu = (e, conversation) => {
@@ -741,6 +634,46 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
   // Sohbetleri grupla
   const groupedConversations = groupConversationsByDate(conversations);
   
+  // Konversasyon listeleri renderı için ayrı bir bileşen oluşturalım
+  const RenderConversation = ({ conversation, active, onClick, onContextMenu }) => {
+    // Doğrudan click handler ekleyelim
+    const handleClick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClick(conversation.id);
+    };
+    
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onContextMenu(e, conversation);
+    };
+    
+    return (
+      <ConversationItemWrapper
+        id={`chat-${conversation.id}`}
+        key={conversation.id}
+        active={active}
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        data-testid={`conversation-item-${conversation.id}`}
+        className="conversation-item"
+      >
+        <ConversationIcon>
+          {conversation.pinned ? <FaThumbtack /> : <FaRegClock />}
+        </ConversationIcon>
+        <ConversationDetails>
+          <ConversationTitle>
+            {conversation.title}
+          </ConversationTitle>
+          <ConversationTime>
+            {formatDate(conversation.updatedAt || conversation.createdAt)}
+          </ConversationTime>
+        </ConversationDetails>
+      </ConversationItemWrapper>
+    );
+  };
+  
   // Context menü içeriği
   const renderContextMenu = () => {
     if (!contextMenu) return null;
@@ -777,28 +710,6 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
     );
   };
   
-  // Sohbet listesi öğesi bileşeni
-  const ConversationItem = ({ conversation, active }) => (
-    <ConversationItemWrapper
-      id={`chat-${conversation.id}`}
-      active={active}
-      onClick={() => handleConversationClick(conversation.id)}
-      onContextMenu={(e) => handleContextMenu(e, conversation)}
-    >
-      <ConversationIcon>
-        {conversation.pinned ? <FaThumbtack /> : <FaRegClock />}
-      </ConversationIcon>
-      <ConversationDetails>
-        <ConversationTitle>
-          {conversation.title}
-        </ConversationTitle>
-        <ConversationTime>
-          {formatDate(conversation.updatedAt || conversation.createdAt)}
-        </ConversationTime>
-      </ConversationDetails>
-    </ConversationItemWrapper>
-  );
-
   return (
     <SidebarContainer showSidebar={showSidebar}>
       <SidebarTop>
@@ -845,10 +756,12 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
                   transition={{ duration: 0.2 }}
                 >
                   {pinnedConversations.map((conversation) => (
-                    <ConversationItem 
+                    <RenderConversation 
                       key={conversation.id}
                       conversation={conversation}
                       active={activeConversation === conversation.id}
+                      onClick={handleConversationClick}
+                      onContextMenu={handleContextMenu}
                     />
                   ))}
                 </ConversationsList>
@@ -865,10 +778,12 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
             </SectionTitle>
             <ConversationsList>
               {groupedConversations.today.map((conversation) => (
-                <ConversationItem 
+                <RenderConversation 
                   key={conversation.id}
                   conversation={conversation}
                   active={activeConversation === conversation.id}
+                  onClick={handleConversationClick}
+                  onContextMenu={handleContextMenu}
                 />
               ))}
             </ConversationsList>
@@ -883,10 +798,12 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
             </SectionTitle>
             <ConversationsList>
               {groupedConversations.yesterday.map((conversation) => (
-                <ConversationItem 
+                <RenderConversation 
                   key={conversation.id}
                   conversation={conversation}
                   active={activeConversation === conversation.id}
+                  onClick={handleConversationClick}
+                  onContextMenu={handleContextMenu}
                 />
               ))}
             </ConversationsList>
@@ -901,10 +818,12 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
             </SectionTitle>
             <ConversationsList>
               {groupedConversations.thisWeek.map((conversation) => (
-                <ConversationItem 
+                <RenderConversation 
                   key={conversation.id}
                   conversation={conversation}
                   active={activeConversation === conversation.id}
+                  onClick={handleConversationClick}
+                  onContextMenu={handleContextMenu}
                 />
               ))}
             </ConversationsList>
@@ -919,10 +838,12 @@ const Sidebar = ({ showSidebar, setShowSidebar }) => {
             </SectionTitle>
             <ConversationsList>
               {groupedConversations.older.map((conversation) => (
-                <ConversationItem 
+                <RenderConversation 
                   key={conversation.id}
                   conversation={conversation}
                   active={activeConversation === conversation.id}
+                  onClick={handleConversationClick}
+                  onContextMenu={handleContextMenu}
                 />
               ))}
             </ConversationsList>

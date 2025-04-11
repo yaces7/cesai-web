@@ -693,21 +693,41 @@ const Chat = () => {
     
     if (!input.trim() || loading || !user) return;
     
+    // Gönderilecek mesajı geçici olarak sakla
+    const messageToSend = input.trim();
+    
     // Eğer chatId "new" ise veya bulunmuyorsa, yeni bir sohbet oluştur
     if (!chatId || chatId === "new") {
       try {
+        console.log('Yeni bir sohbet oluşturuluyor...');
+        setLoading(true);
+        
+        // Önce input'u temizle
+        setInput('');
+        
+        // Yeni sohbet oluştur
         const newChatId = await createConversation('Yeni Sohbet');
+        console.log(`Yeni sohbet oluşturuldu, ID: ${newChatId}, mesaj gönderilecek`);
+        
+        // Yönlendirme yaptıktan sonra, aynı sayfada kalmayacağız
+        // Yönlendirme işlemi, yeni bir Chat bileşeni başlatacak
         navigate(`/chat/${newChatId}`);
-        return; // Yeni sayfaya yönlendirildikten sonra işlemi durdur
+        
+        // URL değişikliği sonucunda yeni bir Chat bileşeni yüklenecek
+        // Bu nedenle mevcut bileşen üzerinden işleme devam etmeyelim
+        return;
+        
       } catch (error) {
         console.error('Yeni sohbet oluşturulurken hata oluştu:', error);
         setError('Yeni sohbet oluşturulurken hata oluştu: ' + error.message);
+        setLoading(false);
         return;
       }
     }
     
+    // Artık mevcut bir sohbete mesaj gönderiyoruz
     const userMessage = {
-      text: input.trim(),
+      text: messageToSend,
       isUser: true,
       timestamp: new Date().toISOString()
     };
@@ -730,7 +750,7 @@ const Chat = () => {
       
       // Yapay zeka cevabı oluştur
       try {
-        const aiResponseData = await getAIResponse(input.trim());
+        const aiResponseData = await getAIResponse(messageToSend);
         
         const aiMessage = {
           text: aiResponseData.text,
