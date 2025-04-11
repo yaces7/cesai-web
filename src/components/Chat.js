@@ -443,66 +443,86 @@ const API_URL = 'https://cesai-production.up.railway.app';
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
   try {
-    // İstek yapılandırması
-    const config = {
+    // CORS hatasını önlemek için doğrudan JSON yanıtı döndüren bir istek oluştur
+    const urlWithParams = `${API_URL}${endpoint}?${new URLSearchParams({
+      timestamp: Date.now()  // Cache'i önlemek için
+    }).toString()}`;
+    
+    console.log(`API isteği yapılıyor: ${method} ${urlWithParams}`);
+    
+    // İstek seçenekleri
+    const options = {
       method,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
-      },
-      credentials: 'include',
-      signal: AbortSignal.timeout(timeoutMs)
+      }
     };
-    
-    // POST, PUT gibi metotlar için içerik ekle
-    if (data) {
-      config.body = JSON.stringify(data);
-    }
     
     // Token varsa ekle
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      options.headers['Authorization'] = `Bearer ${token}`;
     }
     
-    console.log(`API isteği yapılıyor: ${method} ${API_URL}${endpoint}`);
-    const response = await fetch(`${API_URL}${endpoint}`, config);
-    
-    // Yanıtı kontrol et
-    if (response.ok) {
-      if (method === 'GET' || method === 'POST') {
-        try {
-          const data = await response.json();
-          console.log("API yanıtı alındı:", data);
-          return { success: true, data };
-        } catch (e) {
-          console.error("JSON çözümleme hatası:", e);
-          return { success: true }; // JSON içeriği olmayabilir
-        }
-      }
-      return { success: true };
+    // POST için veri ekle
+    if (data && (method === 'POST' || method === 'PUT')) {
+      options.body = JSON.stringify(data);
     }
     
-    // API hatası
-    let errorMessage = `API Hatası: ${response.status}`;
+    // Zaman aşımı işleyicisi ekle
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    options.signal = controller.signal;
+    
+    // İsteği gönder
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorMessage;
-    } catch (e) {
-      // JSON parse hatası
+      const response = await fetch(urlWithParams, options);
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        // Başarılı yanıt
+        try {
+          const responseData = await response.json();
+          console.log('API yanıtı (başarılı):', responseData);
+          return { success: true, data: responseData };
+        } catch (jsonError) {
+          console.warn('JSON çözümleme hatası:', jsonError);
+          return { success: true, data: {} }; // JSON içeriği olmayabilir
+        }
+      } else {
+        // Hata yanıtı
+        let errorData = {};
+        try {
+          errorData = await response.json();
+          console.error('API hata yanıtı:', errorData);
+        } catch (e) {
+          console.error('Hata yanıtı JSON olarak çözümlenemedi');
+        }
+        
+        return { 
+          success: false, 
+          status: response.status, 
+          message: errorData.message || `Sunucu hatası: ${response.status}`
+        };
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      throw fetchError;
     }
-    
-    return { 
-      success: false, 
-      status: response.status, 
-      message: errorMessage
-    };
   } catch (error) {
     console.error('API isteği sırasında hata:', error);
-    return { 
-      success: false, 
-      message: error.name === 'TimeoutError' || error.name === 'AbortError'
-        ? 'İstek zaman aşımına uğradı'
-        : `API İsteği Hatası: ${error.message}`
+    
+    // AbortError durumunu kontrol et (zaman aşımı)
+    if (error.name === 'AbortError') {
+      return { 
+        success: false, 
+        message: 'İstek zaman aşımına uğradı, sunucu yanıt vermiyor.'
+      };
+    }
+    
+    return {
+      success: false,
+      message: `Bağlantı hatası: ${error.message}`
     };
   }
 };
@@ -772,68 +792,64 @@ const Chat = () => {
         throw new Error('İnternet bağlantınız yok. Lütfen bağlantınızı kontrol edin.');
       }
       
+      // API durumunu güncelle
+      setApiStatus('connecting');
+      
       // Firebase kimlik doğrulama token'ını al
       let token = '';
       try {
-        const user = auth.currentUser;
-        if (user) {
-          token = await user.getIdToken(true);
-        } else {
-          throw new Error('Oturum açık değil');
-        }
-      } catch (error) {
-        console.error('Token alınamadı:', error);
-        setApiStatus('error');
-        throw new Error('Kimlik doğrulama başarısız. Lütfen tekrar giriş yapın.');
+        token = await user.getIdToken(true);
+      } catch (tokenError) {
+        console.error('Token alınamadı:', tokenError);
+        throw new Error('Kimlik doğrulama hatası: ' + tokenError.message);
       }
-      
-      // API durumunu güncelle - bağlantı kuruluyor
-      setApiStatus('connecting');
       
       console.log('Mesaj gönderiliyor...');
       
-      const result = await callApi('/chat', 'POST', {
+      // API'ye istek gönder
+      const response = await callApi('/chat', 'POST', {
         message: text,
-        conversation_id: currentChatId,
+        conversation_id: currentChatId || 'new',
         model: 'gpt-3.5-turbo'
-      }, token, 60000); // Timeout süresini arttırıyorum
+      }, token);
       
-      // API yanıtı başarılı ise
-      if (result.success) {
-        // API durumunu güncelle - bağlantı kuruldu
-        setApiStatus('connected');
-        
-        const data = result.data;
-        console.log("İşlenecek API yanıtı:", data);
-        
-        // Yanıt formatını kontrol et ve işle
-        if (!data || (!data.response && !data.message)) {
-          console.warn("API'den boş yanıt alındı");
-          return {
-            text: "Üzgünüm, yanıt alınamadı. Lütfen tekrar deneyin.",
-            isUser: false,
-            timestamp: new Date().toISOString(),
-            error: true
-          };
-        }
-        
-        return {
-          text: data.response || data.message || '',
-          analysis: data.analysis || null,
-          context: data.context || null,
-          code_blocks: data.code_blocks || [],
-          security_insights: data.security_insights || null,
-          planning: data.planning || null
-        };
-      } else {
-        // API yanıtı başarısız ise
-        setApiStatus('error');
-        throw new Error(result.message || 'API yanıt vermedi');
+      // API yanıtını güncelle
+      setApiStatus(response.success ? 'connected' : 'error');
+      
+      if (!response.success) {
+        throw new Error(response.message || 'API yanıt vermedi');
       }
+      
+      // Gelen veriyi işle
+      if (!response.data) {
+        console.warn('API yanıtı boş');
+        return {
+          text: 'Yanıt alınamadı. Lütfen daha sonra tekrar deneyin.',
+          isUser: false,
+          timestamp: new Date().toISOString(),
+          error: true
+        };
+      }
+      
+      // Doğru yapıyı oluştur
+      return {
+        text: response.data.response || response.data.message || 'Yanıt alınamadı.',
+        isUser: false,
+        timestamp: new Date().toISOString(),
+        analysis: response.data.analysis || null,
+        code_blocks: response.data.code_blocks || [],
+        security_insights: response.data.security_insights || null
+      };
     } catch (error) {
       console.error('Mesaj gönderme hatası:', error);
       setApiStatus('error');
-      throw error;
+      
+      return {
+        text: `Üzgünüm, bir hata oluştu: ${error.message}`,
+        isUser: false,
+        timestamp: new Date().toISOString(),
+        error: true
+      };
     }
   };
   
@@ -949,8 +965,6 @@ const Chat = () => {
       let initialMessage = false;
       
       if (currentChatId === "new") {
-        // Sidebar'da tanımladığımız createNewChat fonksiyonunu kullanmak için
-        // navigate ve URL yapısını kullanacağız, bu nedenle önce mesajı state'e ekleyelim
         initialMessage = true;
         
         // Geçici olarak kullanıcı mesajını göster
@@ -962,7 +976,7 @@ const Chat = () => {
         }]);
         
         try {
-          // Sidebar bileşenine erişim sağlamak zor olduğu için aynı mantığı burada uygulayalım
+          // Yeni sohbet oluştur
           const now = new Date();
           const timestamp = now.toISOString();
           
@@ -995,7 +1009,7 @@ const Chat = () => {
           fetchConversation(currentId);
         } catch (firebaseError) {
           console.error("Yeni sohbet oluşturulurken hata:", firebaseError);
-          setError("Firebase veritabanına erişim hatası: " + firebaseError.message);
+          setError("Yeni sohbet oluşturulamadı: " + firebaseError.message);
           setLoading(false);
           return;
         }
@@ -1005,102 +1019,98 @@ const Chat = () => {
           id: Date.now().toString(),
           text: userMessage,
           isUser: true,
-        timestamp: new Date().toISOString()
-      };
-      
-        // Önce local state'i güncelle (UI daha hızlı tepki versin)
+          timestamp: new Date().toISOString()
+        };
+        
+        // UI'ı hemen güncelle
         setMessages(prevMessages => [...prevMessages, userMessageObj]);
-      
-      try {
-          // Firestore'daki mesajları güncelle
-          const conversationRef = doc(db, 'conversations', currentId);
-        await updateDoc(conversationRef, {
+        
+        // Firestore'a kullanıcı mesajını kaydet
+        try {
+          await safeFirestoreUpdate(currentId, {
             messages: arrayUnion(userMessageObj),
-          updatedAt: new Date().toISOString()
-        });
+            updatedAt: new Date().toISOString()
+          });
         } catch (updateError) {
-          console.error("Mesaj Firestore'a kaydedilirken hata:", updateError);
-          // Firestore hatası olsa da devam et, kullanıcı mesajı görüntülenmeye devam eder
+          console.error("Kullanıcı mesajı Firestore'a kaydedilemedi:", updateError);
+          // Devam et - UI zaten güncellendi
         }
       }
       
-      // Sohbet oluşturulduğunda veya mesaj eklendiğinde otomatik kaydırma
+      // Otomatik kaydırma
       setTimeout(() => {
         scrollToBottom();
       }, 100);
       
-      // API yanıtını al (yeni ya da mevcut sohbet için)
-      if (!initialMessage || currentId) {
-        try {
-          // API'ye mesajı gönder ve yanıtı al
-          const aiResponseData = await sendMessage(userMessage);
-          console.log("AI yanıtı:", aiResponseData);
-          
-          // AI mesajı oluştur
-          const aiMessage = {
-            id: Date.now().toString(),
-            text: aiResponseData.text || "Yanıt alınamadı.",
-            isUser: false,
-            timestamp: new Date().toISOString(),
-            analysis: aiResponseData.analysis,
-            context: aiResponseData.context,
-            code_blocks: aiResponseData.code_blocks,
-            security_insights: aiResponseData.security_insights
-          };
-          
+      // AI yanıtını al
+      try {
+        // API'ye istek gönder
+        const aiResponse = await sendMessage(userMessage);
+        
+        if (aiResponse.error) {
+          // Hata mesajını göster ama yanıt olarak ekle
+          setMessages(prevMessages => [...prevMessages, aiResponse]);
+          await safeFirestoreUpdate(currentId, {
+            messages: arrayUnion(aiResponse),
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          // AI yanıtını Firestore'a kaydet ve ekrana göster
           try {
-            // Firestore'daki mesajları güncelle
+            // Mevcut mesajları al
             const conversationRef = doc(db, 'conversations', currentId);
-            
-            // Önce mevcut mesajları al
             const docSnap = await getDoc(conversationRef);
+            
             if (docSnap.exists()) {
-              const data = docSnap.data();
-              const updatedMessages = [...(data.messages || []), aiMessage];
+              // Var olan mesajları güncelle
+              const conversationData = docSnap.data();
+              const currentMessages = conversationData.messages || [];
               
+              // Yeni mesajı ekle
+              const updatedMessages = [...currentMessages, {
+                id: Date.now().toString(),
+                ...aiResponse
+              }];
+              
+              // Firestore'u güncelle
               await updateDoc(conversationRef, {
                 messages: updatedMessages,
                 updatedAt: new Date().toISOString()
               });
-              
-              console.log("AI yanıtı Firestore'a kaydedildi");
             } else {
-              console.error("Sohbet belgesi bulunamadı");
+              console.error("Sohbet kaydı bulunamadı:", currentId);
+              // Yine de mesajı UI'da göster  
+              setMessages(prevMessages => [...prevMessages, aiResponse]);
             }
-          } catch (firebaseError) {
-            console.error("AI yanıtı Firestore'a kaydedilirken hata:", firebaseError);
-            
-            // Firebase hatası olsa da UI'da yanıtı göster
-            setMessages(prevMessages => [...prevMessages, aiMessage]);
-          }
-        } catch (apiError) {
-          console.error("API yanıtı alınırken hata:", apiError);
-          
-          // Hata mesajını sohbete ekle
-          const errorMessage = {
-            id: Date.now().toString(),
-            text: `Üzgünüm, bir hata oluştu: ${apiError.message}`,
-            isUser: false,
-            timestamp: new Date().toISOString(),
-            error: true
-          };
-          
-          setMessages(prevMessages => [...prevMessages, errorMessage]);
-          
-          try {
-            const conversationRef = doc(db, 'conversations', currentId);
-            await updateDoc(conversationRef, {
-              messages: arrayUnion(errorMessage),
-              updatedAt: new Date().toISOString()
-            });
-          } catch (updateError) {
-            console.error("Hata mesajı Firestore'a kaydedilirken hata:", updateError);
+          } catch (firestoreError) {
+            console.error("AI yanıtı Firestore'a kaydedilemedi:", firestoreError);
+            // Yine de mesajı UI'da göster  
+            setMessages(prevMessages => [...prevMessages, aiResponse]);
           }
         }
+      } catch (apiError) {
+        console.error("AI yanıtı alınamadı:", apiError);
+        
+        // Hata mesajı ekle
+        const errorMessage = {
+          id: Date.now().toString(),
+          text: `Üzgünüm, bir hata oluştu: ${apiError.message}`,
+          isUser: false,
+          timestamp: new Date().toISOString(),
+          error: true
+        };
+        
+        setMessages(prevMessages => [...prevMessages, errorMessage]);
+        
+        // Hata mesajını Firestore'a kaydet
+        await safeFirestoreUpdate(currentId, {
+          messages: arrayUnion(errorMessage),
+          updatedAt: new Date().toISOString()
+        });
       }
     } catch (error) {
       console.error("Mesaj gönderilirken hata:", error);
-      setError("Mesaj gönderilirken bir hata oluştu: " + error.message);
+      setError("API İsteği Hatası: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -1237,6 +1247,24 @@ const Chat = () => {
         </div>
       </MessageWrapper>
     );
+  };
+  
+  // Firestore'a yazma işlemi için güvenli fonksiyon
+  const safeFirestoreUpdate = async (conversationId, updatedData) => {
+    if (!conversationId || !db || !updatedData) {
+      console.error('Firestore güncellemesi için gerekli parametreler eksik');
+      return false;
+    }
+    
+    try {
+      const conversationRef = doc(db, 'conversations', conversationId);
+      await updateDoc(conversationRef, updatedData);
+      console.log('Firestore başarıyla güncellendi');
+      return true;
+    } catch (error) {
+      console.error('Firestore güncellenirken hata:', error);
+      return false;
+    }
   };
   
   // Firestore'dan sohbeti yükleme
