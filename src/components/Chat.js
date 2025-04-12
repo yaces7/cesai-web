@@ -807,7 +807,7 @@ const Chat = () => {
       console.log('Mesaj gönderiliyor...');
       
       // API'ye istek gönder
-      const response = await callApi('/chat', 'POST', {
+      const response = await callApi('/api/chat', 'POST', {
         message: text,
         conversation_id: currentChatId || 'new',
         model: 'gpt-3.5-turbo'
@@ -1308,20 +1308,38 @@ const Chat = () => {
     }
   }, [currentChatId]);
   
-  // API bağlantı durumunu kontrol etme (artık hiç sağlık kontrolü yapmıyoruz, direkt çalışıyoruz)
+  // API bağlantı kontrolü için fonksiyon
   const checkApiConnection = async () => {
-    // API durumu zaten bağlı ise, tekrar kontrol etme
-    if (apiStatus === 'connected') return true;
-    
-    // API durumunu güncelle
-    setApiStatus('connecting');
-    
     try {
-      // API durumu test edildi olarak say ve devam et
-      setApiStatus('connected');
-      return true;
+      setApiStatus('connecting');
+      
+      // Doğrudan API'ye istek yap
+      try {
+        const healthResponse = await fetch(`${API_URL}/api/health`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          mode: 'cors', // CORS ayarlarını kullan
+          credentials: 'include', // Cookie'lerin gönderilmesini sağlar
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (healthResponse.ok) {
+          console.log('API bağlantısı başarılı');
+          setApiStatus('connected');
+          return true;
+        } else {
+          console.warn(`API yanıt kodu: ${healthResponse.status}`);
+          throw new Error(`Sunucu yanıt verdi, fakat durum kodu: ${healthResponse.status}`);
+        }
+      } catch (fetchError) {
+        console.error('Doğrudan API bağlantısı hatası:', fetchError);
+        throw fetchError;
+      }
     } catch (error) {
-      console.error('API bağlantı kontrolü başarısız:', error);
+      console.error('API bağlantı kontrolü başarısız:', error.message);
       setApiStatus('error');
       return false;
     }
