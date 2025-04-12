@@ -438,7 +438,7 @@ const ConnectionStatus = ({ status, onRetryClick }) => {
 };
 
 // API URL'sini ortam değişkeninden al veya varsayılan değeri kullan
-const API_URL = 'https://cesai-production.up.railway.app';
+const API_URL = 'https://cesai.up.railway.app';
 
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
@@ -1321,7 +1321,6 @@ const Chat = () => {
             'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
           },
-          mode: 'cors', // CORS ayarlarını kullan
           credentials: 'include', // Cookie'lerin gönderilmesini sağlar
           signal: AbortSignal.timeout(5000)
         });
