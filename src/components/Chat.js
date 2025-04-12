@@ -798,7 +798,12 @@ const Chat = () => {
       // Firebase kimlik doğrulama token'ını al
       let token = '';
       try {
-        token = await user.getIdToken(true);
+        // Context'teki getFirebaseToken fonksiyonunu kullan
+        token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('Kimlik doğrulama bilgisi alınamadı');
+        }
       } catch (tokenError) {
         console.error('Token alınamadı:', tokenError);
         throw new Error('Kimlik doğrulama hatası: ' + tokenError.message);
@@ -1234,13 +1239,13 @@ const Chat = () => {
                 className={feedbackState[messageId] === 5 ? 'active' : ''}
                 onClick={() => sendFeedback(messageId, messages[index-1]?.text || '', text || '', 5)}
               >
-                <FaThumbsUp /> Yararlı
+                <FaThumbsUp /> İyi
               </FeedbackButton>
               <FeedbackButton 
                 className={feedbackState[messageId] === 1 ? 'active' : ''}
                 onClick={() => sendFeedback(messageId, messages[index-1]?.text || '', text || '', 1)}
               >
-                <FaThumbsDown /> Yararlı değil
+                <FaThumbsDown /> Kötü
               </FeedbackButton>
             </FeedbackButtons>
           )}
