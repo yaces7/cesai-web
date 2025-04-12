@@ -162,22 +162,32 @@ export const FirebaseProvider = ({ children }) => {
   
   // Firebase kimlik doğrulama token'ını güvenli bir şekilde al
   const getFirebaseToken = async () => {
-    try {
-      // auth.currentUser doğrudan Firebase'den kontrol et
-      const firebaseUser = auth.currentUser;
+    return new Promise((resolve, reject) => {
+      const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+        unsubscribe(); // Dinlemeyi durdur, sadece bir kez çalışsın
+        
+        if (!firebaseUser) {
+          console.warn('Kullanıcı oturumu yok.');
+          resolve(null);  // Null döndür, hata fırlatma
+          return;
+        }
+        
+        try {
+          const token = await firebaseUser.getIdToken(true);
+          console.log('Token başarıyla alındı');
+          resolve(token);
+        } catch (err) {
+          console.error('Token alınırken hata:', err);
+          reject(err);
+        }
+      });
       
-      if (!firebaseUser) {
-        console.warn('Kimlik doğrulama hatası: Oturum açık değil');
-        return null;
-      }
-      
-      // Kullanıcı varsa token al
-      const token = await firebaseUser.getIdToken(true);
-      return token;
-    } catch (error) {
-      console.error('Token alınırken hata:', error);
-      throw new Error('Token alınamadı: ' + error.message);
-    }
+      // Güvenlik için timeout ekleyelim
+      setTimeout(() => {
+        resolve(null);
+        console.warn('Token alma işlemi zaman aşımına uğradı');
+      }, 5000);
+    });
   };
   
   // Kullanıcı oturum durumunu izle

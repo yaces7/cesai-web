@@ -453,14 +453,11 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
+        'Accept': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      credentials: 'include' // Cookie'lerin gönderilmesini sağlar
     };
-    
-    // Token varsa ekle
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
     
     // POST, PUT veya PATCH için body ekle
     if (data && ['POST', 'PUT', 'PATCH'].includes(method)) {
@@ -800,7 +797,7 @@ const Chat = () => {
         
         if (!token) {
           console.warn('Token alınamadı veya boş');
-          throw new Error('Kimlik doğrulama bilgisi alınamadı');
+          throw new Error('Kimlik doğrulama bilgisi alınamadı. Lütfen tekrar giriş yapın.');
         }
       } catch (tokenError) {
         console.error('Token alınamadı:', tokenError);
@@ -1022,9 +1019,9 @@ const Chat = () => {
           id: Date.now().toString(),
           text: userMessage,
           isUser: true,
-          timestamp: new Date().toISOString()
-        };
-        
+        timestamp: new Date().toISOString()
+      };
+      
         // UI'ı hemen güncelle
         setMessages(prevMessages => [...prevMessages, userMessageObj]);
         
@@ -1076,10 +1073,10 @@ const Chat = () => {
               }];
               
               // Firestore'u güncelle
-              await updateDoc(conversationRef, {
-                messages: updatedMessages,
-                updatedAt: new Date().toISOString()
-              });
+        await updateDoc(conversationRef, {
+          messages: updatedMessages,
+          updatedAt: new Date().toISOString()
+        });
             } else {
               console.error("Sohbet kaydı bulunamadı:", currentId);
               // Yine de mesajı UI'da göster  
