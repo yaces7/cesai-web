@@ -160,20 +160,23 @@ export const FirebaseProvider = ({ children }) => {
   const [firebaseError, setFirebaseError] = useState(null);
   const [idToken, setIdToken] = useState(null);
   
-  // Firebase token'ını almak için yardımcı fonksiyon
-  const getFirebaseToken = async (forceRefresh = false) => {
-    if (!auth.currentUser) {
-      console.error("Token alınamadı: Oturum açık değil");
-      throw new Error("Oturum açık değil");
-    }
-    
+  // Firebase kimlik doğrulama token'ını güvenli bir şekilde al
+  const getFirebaseToken = async () => {
     try {
-      const token = await auth.currentUser.getIdToken(forceRefresh);
-      setIdToken(token);
+      // auth.currentUser doğrudan Firebase'den kontrol et
+      const firebaseUser = auth.currentUser;
+      
+      if (!firebaseUser) {
+        console.warn('Kimlik doğrulama hatası: Oturum açık değil');
+        return null;
+      }
+      
+      // Kullanıcı varsa token al
+      const token = await firebaseUser.getIdToken(true);
       return token;
     } catch (error) {
-      console.error("Token alınırken hata oluştu:", error);
-      throw error;
+      console.error('Token alınırken hata:', error);
+      throw new Error('Token alınamadı: ' + error.message);
     }
   };
   

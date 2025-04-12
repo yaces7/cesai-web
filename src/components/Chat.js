@@ -443,15 +443,13 @@ const API_URL = 'https://cesai-production.up.railway.app';
 // API istekleri için yardımcı fonksiyon
 const callApi = async (endpoint, method = 'GET', data = null, token = null, timeoutMs = 10000) => {
   try {
-    // CORS hatasını önlemek için doğrudan JSON yanıtı döndüren bir istek oluştur
-    const urlWithParams = `${API_URL}${endpoint}?${new URLSearchParams({
-      timestamp: Date.now()  // Cache'i önlemek için
-    }).toString()}`;
+    // API URL'sini oluştur
+    const url = `${API_URL}${endpoint}`;
     
-    console.log(`API isteği yapılıyor: ${method} ${urlWithParams}`);
+    console.log(`API isteği yapılıyor: ${method} ${url}`);
     
-    // İstek seçenekleri
-    const options = {
+    // İstek yapılandırması
+    const config = {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -461,68 +459,62 @@ const callApi = async (endpoint, method = 'GET', data = null, token = null, time
     
     // Token varsa ekle
     if (token) {
-      options.headers['Authorization'] = `Bearer ${token}`;
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
     
-    // POST için veri ekle
-    if (data && (method === 'POST' || method === 'PUT')) {
-      options.body = JSON.stringify(data);
+    // POST, PUT veya PATCH için body ekle
+    if (data && ['POST', 'PUT', 'PATCH'].includes(method)) {
+      config.body = JSON.stringify(data);
     }
     
-    // Zaman aşımı işleyicisi ekle
+    // Zaman aşımı için
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    options.signal = controller.signal;
+    config.signal = controller.signal;
     
-    // İsteği gönder
-    try {
-      const response = await fetch(urlWithParams, options);
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        // Başarılı yanıt
-        try {
-          const responseData = await response.json();
-          console.log('API yanıtı (başarılı):', responseData);
-          return { success: true, data: responseData };
-        } catch (jsonError) {
-          console.warn('JSON çözümleme hatası:', jsonError);
-          return { success: true, data: {} }; // JSON içeriği olmayabilir
-        }
-      } else {
-        // Hata yanıtı
-        let errorData = {};
-        try {
-          errorData = await response.json();
-          console.error('API hata yanıtı:', errorData);
-        } catch (e) {
-          console.error('Hata yanıtı JSON olarak çözümlenemedi');
-        }
-        
-        return { 
-          success: false, 
-          status: response.status, 
-          message: errorData.message || `Sunucu hatası: ${response.status}`
-        };
+    // Fetch isteği gönder
+    const response = await fetch(url, config);
+    clearTimeout(timeoutId);
+    
+    // Yanıtı işle
+    if (response.ok) {
+      // İçerik varsa JSON olarak işle
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        return { success: true, data };
       }
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      throw fetchError;
+      // JSON olmayan başarılı yanıt
+      return { success: true };
     }
+    
+    // Hata yanıtı
+    let errorData = {};
+    try {
+      errorData = await response.json();
+    } catch (e) {
+      // JSON içeriği yoksa
+    }
+    
+    return {
+      success: false,
+      status: response.status,
+      message: errorData.message || errorData.detail || `Sunucu hatası: ${response.status}`
+    };
   } catch (error) {
+    // Zaman aşımı veya ağ hatası
     console.error('API isteği sırasında hata:', error);
     
-    // AbortError durumunu kontrol et (zaman aşımı)
     if (error.name === 'AbortError') {
-      return { 
-        success: false, 
-        message: 'İstek zaman aşımına uğradı, sunucu yanıt vermiyor.'
+      return {
+        success: false,
+        message: 'İstek zaman aşımına uğradı. Sunucu yanıt vermiyor.'
       };
     }
     
     return {
       success: false,
-      message: `Bağlantı hatası: ${error.message}`
+      message: `İstek hatası: ${error.message}`
     };
   }
 };
@@ -799,9 +791,15 @@ const Chat = () => {
       let token = '';
       try {
         // Context'teki getFirebaseToken fonksiyonunu kullan
+        if (typeof getFirebaseToken !== 'function') {
+          console.error('getFirebaseToken fonksiyonu tanımlı değil!');
+          throw new Error('Kimlik doğrulama fonksiyonu bulunamadı');
+        }
+        
         token = await getFirebaseToken();
         
         if (!token) {
+          console.warn('Token alınamadı veya boş');
           throw new Error('Kimlik doğrulama bilgisi alınamadı');
         }
       } catch (tokenError) {
